@@ -10,7 +10,7 @@ export default function RequestLogPanel() {
   return (
     <div className="reqlog">
       <div className="row" style={{justifyContent:'space-between', marginBottom:8}}>
-        <h4>Request Log</h4>
+        <h4>Request log</h4>
         <Button className="ghost" onClick={clear}>Очистить</Button>
       </div>
 
