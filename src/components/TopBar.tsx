@@ -1,6 +1,6 @@
 import { useStore } from '@/store/useStore';
 import { apiConfig, api } from '@/api/client';
-import { Button, Field, Input, FilePicker } from './UiKit';  // ⬅️ импорт FilePicker
+import { Button, Field, Input, FilePicker } from './UiKit';
 import { useEffect, useState } from 'react';
 
 export default function TopBar() {
@@ -20,11 +20,17 @@ export default function TopBar() {
   async function loadByCameraId() {
     if (!cameraId) return;
     try {
-      const { image_url } = await api.getCameraSnapshotUrl(cameraId);
-      const img = await loadImage(image_url);
+      const snap = await api.getSnapshot(parseInt(cameraId, 10));
+      const url = snap?.image_url || '/sample.jpg';
+      const img = await loadImage(url);
       setImage(img);
       fitToView(img);
-    } catch { /* noop */ }
+    } catch {
+      // fallback: локальная картинка для дев-режима
+      const img = await loadImage('/sample.jpg');
+      setImage(img);
+      fitToView(img);
+    }
   }
 
   function fitToView(_img: { naturalWidth: number; naturalHeight: number; url: string }) {
@@ -33,7 +39,6 @@ export default function TopBar() {
 
   return (
     <div className="topbar">
-      {/* выравниваем по нижнему краю, чтобы все контролы были на одной линии */}
       <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="API Base">
           <Input
@@ -53,7 +58,7 @@ export default function TopBar() {
 
         <Field label="Camera ID">
           <div className="row" style={{ gap: 6 }}>
-            <Input value={cameraId} onChange={e=>setCamera(e.target.value)} placeholder="cam-001"/>
+            <Input value={cameraId} onChange={e=>setCamera(e.target.value)} placeholder="42"/>
             <Button onClick={loadByCameraId}>Загрузить по Camera ID</Button>
           </div>
         </Field>
@@ -65,8 +70,6 @@ export default function TopBar() {
           </div>
         </Field>
 
-        {/* ⬇️ оборачиваем FilePicker в Field с "пустым" лейблом (неразрывный пробел),
-            чтобы высота заголовка совпала с остальными полями */}
         <Field label=" ">
           <FilePicker
             accept="image/*"
