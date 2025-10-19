@@ -1,0 +1,54 @@
+# --- Node / package managers ---
+node_modules/
+.pnpm-store/
+
+# --- Build outputs ---
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# --- Vite / tool caches ---
+.vite/
+node_modules/.vite/
+.eslintcache
+.stylelintcache
+.turbo/
+.parcel-cache/
+.cache/
+
+# --- Logs / diagnostics ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# --- Env ---
+.env
+.env.local
+.env.*.local
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+Icon?
+.Spotlight-V100
+.Trashes
+
+# --- Editors / IDEs ---
+.idea/
+.vscode/*
+.history/
+*.swp
+*.swo
+
+# --- Tests / coverage ---
+coverage/
+.jest/
+*.lcov
+
+# --- Misc ---
+*.local
+*.tmp
+~$*
