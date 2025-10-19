@@ -3,8 +3,8 @@ import { Button, Field, Input, Select } from './UiKit';
 
 export default function Sidebar() {
   const s = useStore();
-  const zone = s.zones.find(z => z.id === s.activeZoneId);
-  const lot  = zone?.lots.find(l => l.lot_id === s.activeLotId);
+  const zone = s.zones.find(z => String(z.id) === String(s.activeZoneId));
+  const lot  = zone?.lots.find(l => String(l.lot_id) === String(s.activeLotId));
 
   function startNewZone() {
     const z = s.addZone();
@@ -13,7 +13,7 @@ export default function Sidebar() {
   function startDrawLot() {
     if (!zone) return;
     s.lotDraftClear();
-    s.setTool('drawLot'); // явный режим рисования
+    s.setTool('drawLot');
   }
   function finishEditing() {
     s.setTool('select');
@@ -37,12 +37,16 @@ export default function Sidebar() {
       <h4>Зоны</h4>
       <div className="list">
         {s.zones.map(z => (
-          <div key={z.id} className={`item ${s.activeZoneId===z.id ? 'active':''}`} onClick={()=>s.selectZone(z.id)}>
+          <div key={String(z.id)} className={`item ${String(s.activeZoneId)===String(z.id) ? 'active':''}`} onClick={()=>s.selectZone(z.id)}>
             <div style={{display:'flex', justifyContent:'space-between'}}>
-              <div>{z.name ?? z.id}</div>
+              <div>{String(z.id)}</div>
               <span className="badge">{z.zone_type}</span>
             </div>
-            <div className="small">capacity: {z.capacity} • lots: {z.lots.length} • pay: {z.pay}</div>
+            <div className="small">
+              capacity: {z.capacity}
+              {' • '}lots_count: {z.lots_count ?? 0}
+              {' • '}pay: {z.pay}
+            </div>
           </div>
         ))}
       </div>
@@ -51,11 +55,8 @@ export default function Sidebar() {
         <>
           <hr/>
           <h4>Свойства зоны</h4>
-          <Field label="Name">
-            <Input value={zone.name ?? ''} onChange={e=>s.updateZone(zone.id,{name:e.target.value})}/>
-          </Field>
           <Field label="Zone Type">
-            <Select value={zone.zone_type} onChange={e=>s.updateZone(zone.id,{zone_type:e.target.value})}>
+            <Select value={zone.zone_type} onChange={e=>s.updateZone(zone.id,{zone_type:e.target.value as any})}>
               <option value="standard">standard</option>
               <option value="parallel">parallel</option>
               <option value="disabled">disabled</option>
@@ -75,10 +76,9 @@ export default function Sidebar() {
             <Button className="ghost" onClick={finishEditing}>Готово</Button>
           </div>
           <div className="row" style={{gap:8}}>
-            <Button onClick={()=>s.saveZone(zone.id)}>Сохранить зону (POST/PUT)</Button>
+            <Button onClick={()=>s.saveZone(zone.id)}>Сохранить зону (PUT/POST с lots)</Button>
             <Button className="danger" onClick={()=>s.removeZone(zone.id)}>Удалить зону (DELETE)</Button>
           </div>
-
           <hr/>
           <div className="row" style={{justifyContent:'space-between', alignItems:'baseline'}}>
             <h4>Места (Lots)</h4>
@@ -95,9 +95,11 @@ export default function Sidebar() {
 
           <div className="list">
             {zone.lots.map(l => (
-              <div key={l.lot_id} className={`item ${s.activeLotId===l.lot_id ? 'active':''}`} onClick={()=>s.selectLot(l.lot_id)}>
+              <div key={String(l.lot_id)}
+                   className={`item ${String(s.activeLotId)===String(l.lot_id) ? 'active':''}`}
+                   onClick={()=>s.selectLot(String(l.lot_id))}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <div>{l.label ?? l.lot_id}</div>
+                  <div>{String(l.lot_id)}</div>
                   <span className="badge">{l.image_polygon.length} pts</span>
                 </div>
               </div>
@@ -108,13 +110,11 @@ export default function Sidebar() {
             <>
               <hr/>
               <h4>Свойства лота</h4>
-              <Field label="Label">
-                <Input value={lot.label ?? ''} onChange={e=>s.updateLot(zone.id, lot.lot_id, {label:e.target.value})}/>
-              </Field>
+              {/* label удалён — оставляем только редактирование вершин */}
               <div className="row" style={{gap:8}}>
                 <Button onClick={()=>s.setTool('editLot')}>Редактировать вершины</Button>
                 <Button className="ghost" onClick={finishEditing}>Готово</Button>
-                <Button className="danger" onClick={()=>s.removeLot(zone.id, lot.lot_id)}>Удалить лот</Button>
+                <Button className="danger" onClick={()=>s.removeLot(zone.id, String(lot.lot_id))}>Удалить лот</Button>
               </div>
             </>
           )}
