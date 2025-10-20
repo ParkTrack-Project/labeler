@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import {
   ImageMeta,
-  ParkingLot,
   ParkingZone,
   PxPoint,
   ToolMode,
@@ -10,10 +9,11 @@ import {
 } from '@/types';
 import { clockwiseSort } from '@/geometry/poly';
 import { api } from '@/api/client';
-import { genLotId } from '@/utils/id';
 
 let tmpZoneId = -1;
-const toGeo = (p: PxPoint): GeoPoint => ({ x: p.x, y: p.y, long: null, lat: null });
+
+// Утилита: PxPoint -> GeoPoint (geo пока null)
+const toGeo = (p: PxPoint): GeoPoint => ({ x: p.x, y: p.y, longitude: null, latitude: null });
 
 type State = {
   apiBase: string;
@@ -24,12 +24,9 @@ type State = {
   tool: ToolMode;
   zones: ParkingZone[];
   activeZoneId?: Id;
-  activeLotId?: string;
 
-  // можно оставить для совместимости, если на сервере есть отдельный GET lots
-  lotsLoaded: Record<string, boolean>;
-
-  lotDraft: PxPoint[] | null;
+  // Черновик рисуемой зоны (4 точки)
+  zoneDraft: PxPoint[] | null;
 
   scale: number;
   offsetX: number;
@@ -46,25 +43,21 @@ type State = {
   setTool(t: ToolMode): void;
   setView(scale: number, offsetX: number, offsetY: number): void;
 
-  selectZone(id?: Id): Promise<void>;
-  selectLot(id?: string): void;
+  selectZone(id?: Id): void;
 
   loadZones(): Promise<void>;
-  loadLotsOfZone(zoneId: Id): Promise<void>;
 
-  addZone(initial?: Partial<ParkingZone>): ParkingZone;
+  addZone(): void; // теперь: переводит в drawZone и чистит драфт
+  createZoneFromDraft(): void; // внутренняя: завершение драфта -> добавление зоны
+
   updateZone(id: Id, patch: Partial<ParkingZone>): void;
   ensureZoneClockwise(id: Id): void;
   removeZone(id: Id): Promise<void>;
   saveZone(id: Id): Promise<void>;
 
-  addLot(zoneId: Id, poly: PxPoint[]): ParkingLot | null;
-  updateLot(zoneId: Id, lotId: string, patch: Partial<ParkingLot>): void;
-  removeLot(zoneId: Id, lotId: string): void;
-
-  lotDraftAddPoint(p: PxPoint): void;
-  lotDraftClear(): void;
-  lotDraftComplete(): void;
+  // Рисование зоны
+  zoneDraftAddPoint(p: PxPoint): void;
+  zoneDraftClear(): void;
 };
 
 export const useStore = create<State>((set, get) => ({
@@ -72,8 +65,7 @@ export const useStore = create<State>((set, get) => ({
   cameraId: '',
   tool: 'select',
   zones: [],
-  lotsLoaded: {},
-  lotDraft: null,
+  zoneDraft: null,
   scale: 1,
   offsetX: 0,
   offsetY: 0,
@@ -86,23 +78,18 @@ export const useStore = create<State>((set, get) => ({
   setTool(t) { set({ tool: t }); },
   setView(scale, offsetX, offsetY) { set({ scale, offsetX, offsetY }); },
 
-  async selectZone(id) {
-    set({ activeZoneId: id, activeLotId: undefined, lotDraft: null });
-    if (!id) return;
-
-    // Если сервер начнёт возвращать lots внутри Zone, этот блок можно вырубить.
-    const key = String(id);
-    if (get().lotsLoaded[key]) return;
-    await get().loadLotsOfZone(id);
-  },
-
-  selectLot(id) { set({ activeLotId: id }); },
+  selectZone(id) { set({ activeZoneId: id }); },
 
   async loadZones() {
     set({ loading: true, error: undefined });
     try {
       const cid = get().cameraId ? parseInt(get().cameraId, 10) : undefined;
       const zones = await api.listZones(cid);
+
+      if (zones.length === 0) {
+        tmpZoneId = -1;
+      }
+
       set({ zones });
     } catch (e: any) {
       set({ error: String(e) });
@@ -111,42 +98,39 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async loadLotsOfZone(zoneId) {
-    try {
-      const lots = await api.getLots(zoneId);
-      set((s) => ({
-        zones: s.zones.map(z => String(z.id) === String(zoneId) ? { ...z, lots } : z),
-        lotsLoaded: { ...s.lotsLoaded, [String(zoneId)]: true }
-      }));
-    } catch (e: any) {
-      // если на сервере нет отдельного эндпоинта — просто игнорируем
-      set({ error: String(e) });
-    }
+
+  // Теперь "Добавить зону" = включить drawZone
+  addZone() {
+    set({ tool: 'drawZone', zoneDraft: [] });
   },
 
-  addZone(initial) {
+  // Завершение черновика: создаём зону из ровно 4 точек, выбираем ее, tool -> select
+  createZoneFromDraft() {
+    const draft = get().zoneDraft;
+    if (!draft || draft.length !== 4) return;
+
     const { cameraId, zones } = get();
     const cid = parseInt(cameraId || '0', 10) || 0;
 
-    const defaultQuad: [PxPoint, PxPoint, PxPoint, PxPoint] = [
-      { x: 10, y: 10 }, { x: 140, y: 10 }, { x: 140, y: 90 }, { x: 10, y: 90 }
-    ];
-    const quad = (initial?.image_quad as any) ?? defaultQuad;
+    // Сортируем точки по часовой
+    const quad = clockwiseSort(draft as [PxPoint, PxPoint, PxPoint, PxPoint]) as [PxPoint, PxPoint, PxPoint, PxPoint];
 
     const z: ParkingZone = {
       id: tmpZoneId--,
       camera_id: cid,
-      zone_type: (initial?.zone_type as any) ?? 'standard',
-      capacity: initial?.capacity ?? 0,
-      pay: initial?.pay ?? 0,
+      zone_type: 'standard',
+      capacity: 0,
+      pay: 0,
       image_quad: quad,
-      points: quad.map(toGeo) as any,
-      lots: [],
-      lots_count: 0
+      points: quad.map(toGeo) as any
     };
 
-    set({ zones: [...zones, z], activeZoneId: z.id, tool: 'editZone' });
-    return z;
+    set({
+      zones: [...zones, z],
+      activeZoneId: z.id,
+      tool: 'select',
+      zoneDraft: null
+    });
   },
 
   updateZone(id, patch) {
@@ -168,46 +152,45 @@ export const useStore = create<State>((set, get) => ({
     try {
       const isPersisted = (typeof id === 'number' && id > 0) || typeof id === 'string';
       if (isPersisted) await api.deleteZone(id);
-      set((s) => ({
-        zones: s.zones.filter(z => String(z.id) !== String(id)),
-        activeZoneId: String(s.activeZoneId) === String(id) ? undefined : s.activeZoneId,
-        activeLotId: undefined,
-        lotDraft: null
-      }));
+
+      set((s) => {
+        const nextZones = s.zones.filter(z => String(z.id) !== String(id));
+
+        // ⬇️ если не осталось зон — сбрасываем временный счётчик
+        if (nextZones.length === 0) {
+          tmpZoneId = -1;
+        }
+
+        return {
+          zones: nextZones,
+          activeZoneId: String(s.activeZoneId) === String(id) ? undefined : s.activeZoneId
+        };
+      });
     } finally {
       set({ loading: false });
     }
   },
 
-  // ЕДИНЫЙ запрос: POST/PUT зоны С ЛОТАМИ В ТЕЛЕ
   async saveZone(id) {
     const current = get().zones.find(z => String(z.id) === String(id));
     if (!current) return;
-
-    // Обновим порядок вершин и синхронизацию points.x/y
     get().ensureZoneClockwise(id);
 
     set({ loading: true, info: undefined, error: undefined });
     try {
-      let savedZone: ParkingZone = current;
       const existed = (typeof id === 'number' && id > 0) || typeof id === 'string';
 
       if (existed) {
-        // PUT /zones/{id} — в теле уже есть lots
         const updated = await api.updateZone(id, current);
-        // Если сервер не возвращает lots внутри зоны — сохраним локальные
-        savedZone = { ...updated, lots: current.lots };
         set((s) => ({
-          zones: s.zones.map(zz => String(zz.id) === String(id) ? savedZone : zz),
+          zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...updated } : zz),
           info: 'zone-updated'
         }));
       } else {
-        // POST /zones/new — в теле уже есть lots
         const resp = await api.createZone(current);
-        const zone_id: Id = resp?.zone_id ?? resp?.id ?? resp; // подстрахуемся под разные ответы
-        savedZone = { ...current, id: zone_id };
+        const zone_id: Id = resp?.zone_id ?? resp?.id ?? resp;
         set((s) => ({
-          zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...savedZone } : zz),
+          zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...current, id: zone_id } : zz),
           activeZoneId: zone_id,
           info: 'zone-created'
         }));
@@ -219,63 +202,19 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  addLot(zoneId, poly) {
-    const s = get();
-    const zone = s.zones.find(z => String(z.id) === String(zoneId));
-    if (!zone) return null;
-
-    const lot: ParkingLot = {
-      lot_id: genLotId(String(zoneId)),
-      image_polygon: poly,
-      points: poly.map(toGeo),
-      long: null,
-      lat: null
-    };
-
-    set({
-      zones: s.zones.map(z => String(z.id) === String(zoneId) ? { ...z, lots: [...z.lots, lot] } : z),
-      activeLotId: String(lot.lot_id),
-      tool: 'editLot',
-      lotDraft: null
-    });
-    return lot;
+  // ---- Рисование зоны ----
+  zoneDraftAddPoint(p) {
+    const cur = get().zoneDraft ?? [];
+    const next = [...cur, p];
+    if (next.length < 4) {
+      set({ zoneDraft: next });
+    } else if (next.length === 4) {
+      set({ zoneDraft: next });
+      // автоматическое завершение
+      get().createZoneFromDraft();
+    } else {
+      // игнорируем клики после 4-й точки
+    }
   },
-
-  updateLot(zoneId, lotId, patch) {
-    set((s) => ({
-      zones: s.zones.map(z => String(z.id) === String(zoneId)
-        ? {
-            ...z,
-            lots: z.lots.map(lot => {
-              if (String(lot.lot_id) !== String(lotId)) return lot;
-              const next = { ...lot, ...patch } as ParkingLot;
-              if (patch.image_polygon) {
-                next.points = patch.image_polygon.map(toGeo);
-              }
-              return next;
-            })
-          }
-        : z)
-    }));
-  },
-
-  removeLot(zoneId, lotId) {
-    set((s) => ({
-      zones: s.zones.map(z => String(z.id) === String(zoneId)
-        ? { ...z, lots: z.lots.filter(lot => String(lot.lot_id) !== String(lotId)) }
-        : z),
-      activeLotId: undefined
-    }));
-  },
-
-  lotDraftAddPoint(p) {
-    const cur = get().lotDraft ?? [];
-    set({ lotDraft: [...cur, p] });
-  },
-  lotDraftClear() { set({ lotDraft: null }); },
-  lotDraftComplete() {
-    const { lotDraft, activeZoneId, addLot } = get();
-    if (!activeZoneId || !lotDraft || lotDraft.length < 3) return;
-    addLot(activeZoneId, lotDraft);
-  }
+  zoneDraftClear() { set({ zoneDraft: null, tool: 'select' }); }
 }));
