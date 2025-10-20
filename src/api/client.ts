@@ -1,4 +1,4 @@
-import { ParkingZone, GeoPoint, PxPoint, ParkingLot, Id } from '@/types';
+import { ParkingZone, GeoPoint, PxPoint, Id } from '@/types';
 import { useRequestLog } from './requestLog';
 
 type Config = { baseUrl: string; token?: string };
@@ -34,28 +34,12 @@ async function request<T>(method: 'GET'|'POST'|'PUT'|'DELETE', path: string, bod
 }
 
 // --- helpers & mappers ---
-const gp = (x:number, y:number, long:number|null=null, lat:number|null=null): GeoPoint => ({ x,y,long,lat });
+const gp = (x:number, y:number, longitude:number|null=null, latitude:number|null=null): GeoPoint => ({ x,y,longitude,latitude });
 const px = (p: GeoPoint): PxPoint => ({ x: p.x, y: p.y });
 
-function mapLotFromAPI(l: any): ParkingLot {
-  const pts = (l.points || []).map((p: any) => gp(+p.x, +p.y, p.long ?? null, p.lat ?? null)) as GeoPoint[];
-  return {
-    lot_id: l.lot_id as Id,
-    long: l.long ?? null,
-    lat:  l.lat  ?? null,
-    points: pts,
-    image_polygon: pts.map(px)
-  };
-}
-
 function mapZoneFromAPI(z: any): ParkingZone {
-  const pts = (z.points || []).map((p: any) => gp(+p.x, +p.y, p.long ?? null, p.lat ?? null)) as GeoPoint[];
+  const pts = (z.points || []).map((p: any) => gp(+p.x, +p.y, p.longitude ?? null, p.latitude ?? null)) as GeoPoint[];
   const quad = pts.slice(0,4).map(px) as [PxPoint, PxPoint, PxPoint, PxPoint];
-
-  // если сервер вернёт lots внутри зоны — распарсим
-  const lotsArr: ParkingLot[] = Array.isArray(z.lots)
-    ? z.lots.map(mapLotFromAPI)
-    : [];
 
   return {
     id: z.zone_id as Id,
@@ -65,24 +49,9 @@ function mapZoneFromAPI(z: any): ParkingZone {
     pay: +z.pay,
     image_quad: quad,
     points: pts.slice(0,4) as any,
-    lots: lotsArr,
-    lots_count: z.lots_count,
     created_at: z.created_at,
     updated_at: z.updated_at
   };
-}
-
-// ——— ТЕПЕРЬ ЗОНЫ ОТПРАВЛЯЕМ С L O T S В ТЕЛЕ ———
-function buildLotsForBody(lots: ParkingLot[]) {
-  return lots.map(l => ({
-    lot_id: l.lot_id,
-    long: l.long ?? null,
-    lat:  l.lat  ?? null,
-    // формируем points из image_polygon; geo пока null
-    points: (l.image_polygon?.length ? l.image_polygon : l.points)?.map(p => ({
-      x: p.x, y: p.y, long: null, lat: null
-    }))
-  }));
 }
 
 function buildCreateZoneBody(z: ParkingZone) {
@@ -91,8 +60,9 @@ function buildCreateZoneBody(z: ParkingZone) {
     zone_type: z.zone_type,
     capacity: z.capacity,
     pay: z.pay,
-    points: z.points.map(p => ({ x: p.x, y: p.y, long: p.long, lat: p.lat })),
-    lots: buildLotsForBody(z.lots || [])
+    points: z.points.map(p => ({
+      x: p.x, y: p.y, longitude: p.longitude, latitude: p.latitude
+    }))
   };
 }
 
@@ -101,23 +71,22 @@ function buildUpdateZoneBody(z: ParkingZone) {
     zone_type: z.zone_type,
     capacity: z.capacity,
     pay: z.pay,
-    points: z.points.map(p => ({ x: p.x, y: p.y, long: p.long, lat: p.lat })),
-    lots: buildLotsForBody(z.lots || [])
+    points: z.points.map(p => ({
+      x: p.x, y: p.y, longitude: p.longitude, latitude: p.latitude
+    }))
   };
 }
 
 // --- public API ---
 export const api = {
-  // ZONES
   async listZones(cameraId?: number) {
     const q = cameraId ? `?camera_id=${encodeURIComponent(cameraId)}` : '';
     const arr = await request<any[]>('GET', `/zones${q}`);
     return arr.map(mapZoneFromAPI);
   },
   async createZone(z: ParkingZone) {
-    // Сервер может вернуть { zone_id } или целую зону — поддержим оба
     const resp = await request<any>('POST', `/zones/new`, buildCreateZoneBody(z));
-    return resp;
+    return resp; // { zone_id } или полная зона — поддерживаем оба
   },
   async updateZone(zoneId: Id, z: ParkingZone) {
     const updated = await request<any>('PUT', `/zones/${encodeURIComponent(String(zoneId))}`, buildUpdateZoneBody(z));
@@ -127,14 +96,6 @@ export const api = {
     await request<void>('DELETE', `/zones/${encodeURIComponent(String(zoneId))}`);
   },
 
-  // При чтении lots по активной зоне можно оставить вспомогательные маршруты,
-  // если на сервере они есть; фронт больше их НЕ вызывает при сохранении.
-  async getLots(zoneId: Id) {
-    const arr = await request<any[]>('GET', `/zones/${encodeURIComponent(String(zoneId))}/lots`);
-    return arr.map(mapLotFromAPI);
-  },
-
-  // Snapshot JSON
   async getSnapshot(cameraId: number) {
     return request<{ image_url: string; captured_at?: string; width?: number; height?: number }>(
       'GET',

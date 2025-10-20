@@ -3,11 +3,10 @@ import useImage from 'use-image';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import ZoneLayer from './ZoneLayer';
-import LotLayer from './LotLayer';
 import type { KonvaEventObject } from 'konva/lib/Node';
 
 export default function ImageViewport() {
-  const { image, scale, offsetX, offsetY, setView } = useStore();
+  const { image, scale, offsetX, offsetY, setView, tool } = useStore();
   const [img] = useImage(image?.url ?? '');
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,8 +47,10 @@ export default function ImageViewport() {
     setView(newScale, newPos.x, newPos.y);
   };
 
-  const onDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    const st = e.target; // Stage
+  const onDragEnd = (_e: KonvaEventObject<DragEvent>) => {
+    // Stage draggable только в select — значит, просто фиксируем позицию
+    const st = stageRef.current;
+    if (!st) return;
     setView(scale, st.x(), st.y());
   };
 
@@ -62,7 +63,7 @@ export default function ImageViewport() {
       ) : (
         <>
           <div className="toolbar">
-            <div className="badge">scale: {scale.toFixed(2)}</div>
+            <div className="badge">scale: {scale.toFixed(2)} • tool: {tool}</div>
           </div>
           <Stage
             ref={stageRef}
@@ -73,7 +74,7 @@ export default function ImageViewport() {
             x={offsetX}
             y={offsetY}
             onWheel={onWheel}
-            draggable
+            draggable={tool === 'select'}
             onDragEnd={onDragEnd}
           >
             <Layer>
@@ -85,7 +86,6 @@ export default function ImageViewport() {
                 />
               )}
               <ZoneLayer />
-              <LotLayer />
             </Layer>
           </Stage>
         </>
