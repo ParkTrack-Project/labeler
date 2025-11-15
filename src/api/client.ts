@@ -2,7 +2,7 @@ import { ParkingZone, GeoPoint, PxPoint, ParkingLot, Id } from '@/types';
 import { useRequestLog } from './requestLog';
 
 type Config = { baseUrl: string; token?: string };
-let cfg: Config = { baseUrl: 'https://parktrack-api.nawinds.dev/api/v0' };
+let cfg: Config = { baseUrl: 'https://api.parktrack.live/api/v0' };
 
 export const apiConfig = {
   set(baseUrl: string, token?: string) { cfg = { baseUrl, token }; },

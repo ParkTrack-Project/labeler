@@ -44,7 +44,7 @@ export default function TopBar() {
           <Input
             value={apiBase}
             onChange={e=>useStore.setState({ apiBase: e.target.value })}
-            placeholder="https://parktrack-api.nawinds.dev/api/v0"
+            placeholder="https://api.parktrack.live/api/v0"
           />
         </Field>
 

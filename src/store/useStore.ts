@@ -68,7 +68,7 @@ type State = {
 };
 
 export const useStore = create<State>((set, get) => ({
-  apiBase: 'https://parktrack-api.nawinds.dev/api/v0',
+  apiBase: 'https://api.parktrack.live/api/v0',
   cameraId: '',
   tool: 'select',
   zones: [],
