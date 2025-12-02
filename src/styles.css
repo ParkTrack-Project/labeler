@@ -48,6 +48,7 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
   background: #0e1424; cursor: pointer;
 }
 .item.active { outline: 1px solid var(--accent); }
+.item.hover { outline: 1px solid #ffd666; }
 hr { border: none; height: 1px; background: var(--border); margin: 10px 0; }
 
 .badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #1f2b49; border: 1px solid #2c3a62; color: #b6c6ff; }

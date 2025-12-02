@@ -4,11 +4,12 @@ import {
   ParkingZone,
   PxPoint,
   ToolMode,
+  ViewMode,
   GeoPoint,
   Id
 } from '@/types';
 import { clockwiseSort } from '@/geometry/poly';
-import { api } from '@/api/client';
+import { api, Camera } from '@/api/client';
 
 let tmpZoneId = -1;
 
@@ -20,7 +21,9 @@ type State = {
   token?: string;
   cameraId: string;
   image?: ImageMeta;
+  cameraMeta?: Camera;
 
+  viewMode: ViewMode;
   tool: ToolMode;
   zones: ParkingZone[];
   activeZoneId?: Id;
@@ -37,8 +40,11 @@ type State = {
   info?: string;
 
   setApi(base: string, token?: string): void;
+  setViewMode(mode: ViewMode): void;
   setCamera(id: string): void;
   setImage(img: ImageMeta | undefined): void;
+
+  loadCameraMeta(id: number): Promise<void>;
 
   setTool(t: ToolMode): void;
   setView(scale: number, offsetX: number, offsetY: number): void;
@@ -61,8 +67,11 @@ type State = {
 };
 
 export const useStore = create<State>((set, get) => ({
-  apiBase: 'https://api.parktrack.live/api/v0',
+  apiBase: 'https://api.parktrack.live',
   cameraId: '',
+  image: undefined,
+  cameraMeta: undefined,
+  viewMode: 'labeler',
   tool: 'select',
   zones: [],
   zoneDraft: null,
@@ -72,8 +81,18 @@ export const useStore = create<State>((set, get) => ({
   loading: false,
 
   setApi(base, token) { set({ apiBase: base, token }); },
+  setViewMode(mode) { set({ viewMode: mode }); },
   setCamera(id) { set({ cameraId: id }); },
   setImage(img) { set({ image: img }); },
+
+  async loadCameraMeta(id) {
+    try {
+      const cam = await api.getCamera(id);
+      set({ cameraMeta: cam });
+    } catch (e: any) {
+      set({ error: String(e) });
+    }
+  },
 
   setTool(t) { set({ tool: t }); },
   setView(scale, offsetX, offsetY) { set({ scale, offsetX, offsetY }); },

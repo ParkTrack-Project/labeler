@@ -4,10 +4,12 @@ import { Button, Field, Input, FilePicker } from './UiKit';
 import { useEffect, useState } from 'react';
 
 export default function TopBar() {
-  const { apiBase, token, cameraId, setCamera, setImage } = useStore();
+  const { apiBase, token, cameraId, viewMode, setViewMode, setImage } = useStore();
   const [imageUrlInput, setImageUrlInput] = useState('');
 
-  useEffect(() => { apiConfig.set(apiBase, token); }, [apiBase, token]);
+  useEffect(() => {
+    apiConfig.set(apiBase, token);
+  }, [apiBase, token]);
 
   async function loadImageFromUrl() {
     const url = imageUrlInput.trim();
@@ -37,50 +39,78 @@ export default function TopBar() {
     useStore.getState().setView(1, 0, 0);
   }
 
+  const isLabeler = viewMode === 'labeler';
+
+  // при входе в labeler с выбранной камерой — автоматически загружаем снапшот
+  useEffect(() => {
+    if (viewMode === 'labeler' && cameraId) {
+      loadByCameraId();
+    }
+  }, [viewMode, cameraId]);
+
   return (
     <div className="topbar">
       <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Field label="API Base">
-          <Input
-            value={apiBase}
-            onChange={e=>useStore.setState({ apiBase: e.target.value })}
-            placeholder="https://api.parktrack.live/api/v0"
-          />
-        </Field>
+        <div className="row" style={{ gap: 6, marginRight: 16 }}>
+          <Button
+            variant={isLabeler ? 'primary' : 'ghost'}
+            onClick={() => setViewMode('labeler')}
+          >
+            Labeler
+          </Button>
+          <Button
+            variant={viewMode === 'cameras' ? 'primary' : 'ghost'}
+            onClick={() => setViewMode('cameras')}
+          >
+            Cameras
+          </Button>
+        </div>
+
+        {isLabeler && (
+          <Field label="API Base">
+            <Input
+              value={apiBase}
+              onChange={e => useStore.setState({ apiBase: e.target.value })}
+placeholder="https://api.parktrack.live"
+            />
+          </Field>
+        )}
 
         <Field label="Token">
           <Input
             value={token ?? ''}
-            onChange={e=>useStore.setState({ token: e.target.value })}
+            onChange={e => useStore.setState({ token: e.target.value })}
             placeholder="вставьте токен"
           />
         </Field>
 
-        <Field label="Camera ID">
-          <div className="row" style={{ gap: 6 }}>
-            <Input value={cameraId} onChange={e=>setCamera(e.target.value)} placeholder="42"/>
-            <Button onClick={loadByCameraId}>Загрузить по Camera ID</Button>
-          </div>
-        </Field>
+        {isLabeler && (
+          <Field label="Image URL">
+            <div className="row" style={{ gap: 6 }}>
+              <Input
+                style={{ minWidth: 320 }}
+                value={imageUrlInput}
+                onChange={e => setImageUrlInput(e.target.value)}
+                placeholder="http://…/frame.jpg"
+              />
+              <Button onClick={loadImageFromUrl}>Открыть</Button>
+            </div>
+          </Field>
+        )}
 
-        <Field label="Image URL">
-          <div className="row" style={{ gap: 6 }}>
-            <Input style={{ minWidth: 320 }} value={imageUrlInput} onChange={e=>setImageUrlInput(e.target.value)} placeholder="http://…/frame.jpg"/>
-            <Button onClick={loadImageFromUrl}>Открыть</Button>
-          </div>
-        </Field>
-
-        <Field label=" ">
-          <FilePicker
-            accept="image/*"
-            onPick={async (f) => {
-              const url = URL.createObjectURL(f);
-              const img = await loadImage(url);
-              setImage(img);
-              fitToView(img);
-            }}
-          />
-        </Field>
+        {isLabeler && (
+          <Field label=" ">
+            <FilePicker
+              accept="image/*"
+              onPick={async (f) => {
+                const url = URL.createObjectURL(f);
+                const img = await loadImage(url);
+                setImage(img);
+                fitToView(img);
+              }}
+            />
+          </Field>
+        )}
       </div>
     </div>
   );
