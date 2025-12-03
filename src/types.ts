@@ -27,6 +27,8 @@ export type ParkingZone = {
 
 export type ToolMode = 'select' | 'drawZone' | 'editZone';
 
+export type ViewMode = 'labeler' | 'cameras' | 'cameraMapSelector' | 'zoneMapSelector';
+
 export type ImageMeta = {
   url: string;
   naturalWidth: number;

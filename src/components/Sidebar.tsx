@@ -12,10 +12,22 @@ export default function Sidebar() {
     s.setTool('select');
   }
 
+  function openCameraOnMap() {
+    // Разрешаем открывать селектор даже без cameraId: внутри покажется подсказка.
+    s.setViewMode('cameraMapSelector');
+  }
+
+  function openZoneOnMap() {
+    if (!zone) return;
+    s.setViewMode('zoneMapSelector');
+  }
+
   return (
     <div className="sidebar">
       <div className="row" style={{justifyContent:'space-between'}}>
-        <div className="badge">Camera: {s.cameraId || '—'}</div>
+        <div className="badge">
+          Camera: {s.cameraMeta ? `${s.cameraMeta.camera_id} — ${s.cameraMeta.title}` : (s.cameraId || '—')}
+        </div>
         <div className="small">Tool: {s.tool}</div>
       </div>
 
@@ -23,6 +35,9 @@ export default function Sidebar() {
 
       <div className="col">
         <Button onClick={startDrawZone}>+ Добавить зону</Button>
+        <Button className="ghost" onClick={openCameraOnMap}>
+          Отметить камеру на карте
+        </Button>
         {s.tool === 'drawZone' && s.zoneDraft && s.zoneDraft.length > 0 && (
           <Button className="danger" onClick={()=>s.zoneDraftClear()}>Отменить рисование</Button>
         )}
@@ -71,6 +86,11 @@ export default function Sidebar() {
           <div className="row" style={{gap:8}}>
             <Button onClick={()=>s.saveZone(zone.id)}>Сохранить зону (PUT/POST)</Button>
             <Button className="danger" onClick={()=>s.removeZone(zone.id)}>Удалить зону (DELETE)</Button>
+          </div>
+          <div className="row" style={{gap:8}}>
+            <Button className="ghost" onClick={openZoneOnMap}>
+              Отметить зону на карте
+            </Button>
           </div>
         </>
       )}

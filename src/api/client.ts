@@ -1,8 +1,32 @@
-import { ParkingZone, GeoPoint, PxPoint, Id } from '@/types';
+  import { ParkingZone, GeoPoint, PxPoint, Id } from '@/types';
 import { useRequestLog } from './requestLog';
 
 type Config = { baseUrl: string; token?: string };
-let cfg: Config = { baseUrl: 'https://api.parktrack.live/api/v0' };
+let cfg: Config = { baseUrl: 'https://api.parktrack.live' };
+
+// --- types ---
+export type Camera = {
+  camera_id: number;
+  title: string;
+  source: string;
+  image_width: number;
+  image_height: number;
+  calib: any | null;
+  latitude: number;
+  longitude: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type UpdateCameraBody = {
+  title?: string;
+  source?: string;
+  image_width?: number;
+  image_height?: number;
+  calib?: any | null;
+  latitude?: number;
+  longitude?: number;
+};
 
 export const apiConfig = {
   set(baseUrl: string, token?: string) { cfg = { baseUrl, token }; },
@@ -96,7 +120,19 @@ export const api = {
     await request<void>('DELETE', `/zones/${encodeURIComponent(String(zoneId))}`);
   },
 
+  // --- cameras ---
+  async listCameras() {
+    return request<Camera[]>('GET', `/cameras`);
+  },
+  async getCamera(cameraId: number) {
+    return request<Camera>('GET', `/cameras/${encodeURIComponent(cameraId)}`);
+  },
+  async updateCamera(cameraId: number, patch: UpdateCameraBody) {
+    return request<Camera>('PUT', `/cameras/${encodeURIComponent(cameraId)}`, patch);
+  },
+
   async getSnapshot(cameraId: number) {
+    // Backend may return either raw image or JSON with image_url; here we assume JSON wrapper.
     return request<{ image_url: string; captured_at?: string; width?: number; height?: number }>(
       'GET',
       `/cameras/${encodeURIComponent(cameraId)}/snapshot`
