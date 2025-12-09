@@ -128,6 +128,7 @@ function mapZoneFromAPI(z: any): ParkingZone {
 function buildCreateZoneBody(z: ParkingZone) {
   // Ensure exactly 4 points in clockwise order (as per Swagger requirement)
   // Coordinates (latitude/longitude) are required by API
+  // x and y must be integers according to API spec
   const points = z.points.slice(0, 4).map((p, idx) => {
     if (p.latitude === null || p.longitude === null) {
       throw new Error(`Point ${idx + 1} is missing coordinates (latitude/longitude). Please set coordinates on the map first.`);
@@ -135,8 +136,8 @@ function buildCreateZoneBody(z: ParkingZone) {
     return {
       latitude: p.latitude,
       longitude: p.longitude,
-      x: p.x,
-      y: p.y
+      x: Math.round(p.x),
+      y: Math.round(p.y)
     } as ZonePoint;
   });
 
@@ -161,6 +162,7 @@ function buildUpdateZoneBody(z: ParkingZone) {
   
   // If points are provided, include them (maintaining clockwise order)
   // Coordinates (latitude/longitude) are required by API
+  // x and y must be integers according to API spec
   if (z.points && z.points.length === 4) {
     body.points = z.points.map((p, idx) => {
       if (p.latitude === null || p.longitude === null) {
@@ -169,8 +171,8 @@ function buildUpdateZoneBody(z: ParkingZone) {
       return {
         latitude: p.latitude,
         longitude: p.longitude,
-        x: p.x,
-        y: p.y
+        x: Math.round(p.x),
+        y: Math.round(p.y)
       } as ZonePoint;
     });
   }
