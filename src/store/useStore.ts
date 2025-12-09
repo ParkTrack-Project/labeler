@@ -45,6 +45,7 @@ type State = {
   setImage(img: ImageMeta | undefined): void;
 
   loadCameraMeta(id: number): Promise<void>;
+  saveCamera(id: number, patch: Partial<Camera>): Promise<void>;
 
   setTool(t: ToolMode): void;
   setView(scale: number, offsetX: number, offsetY: number): void;
@@ -71,7 +72,7 @@ export const useStore = create<State>((set, get) => ({
   cameraId: '',
   image: undefined,
   cameraMeta: undefined,
-  viewMode: 'labeler',
+  viewMode: 'cameras',
   tool: 'select',
   zones: [],
   zoneDraft: null,
@@ -91,6 +92,18 @@ export const useStore = create<State>((set, get) => ({
       set({ cameraMeta: cam });
     } catch (e: any) {
       set({ error: String(e) });
+    }
+  },
+
+  async saveCamera(id, patch) {
+    set({ loading: true, error: undefined, info: undefined });
+    try {
+      const updated = await api.updateCamera(id, patch);
+      set({ cameraMeta: updated, info: 'camera-updated' });
+    } catch (e: any) {
+      set({ error: String(e) });
+    } finally {
+      set({ loading: false });
     }
   },
 

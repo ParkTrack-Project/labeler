@@ -13,6 +13,10 @@ export function Select(props: ComponentProps<'select'>) {
   const { className, ...rest } = props;
   return <select className={clsx('select', className)} {...rest} />;
 }
+export function Textarea(props: ComponentProps<'textarea'>) {
+  const { className, ...rest } = props;
+  return <textarea className={clsx('input', className)} {...rest} />;
+}
 export function Field({label, children, hint}:{label:string; children:React.ReactNode; hint?:string}) {
   return (
     <div className="col">

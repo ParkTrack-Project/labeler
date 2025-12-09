@@ -4,7 +4,12 @@ import { useRequestLog } from './requestLog';
 type Config = { baseUrl: string; token?: string };
 let cfg: Config = { baseUrl: 'https://api.parktrack.live' };
 
-// --- types ---
+// --- types (according to Swagger schema) ---
+
+export type ErrorResponse = {
+  error_description: string;
+};
+
 export type Camera = {
   camera_id: number;
   title: string;
@@ -14,18 +19,53 @@ export type Camera = {
   calib: any | null;
   latitude: number;
   longitude: number;
-  created_at: string;
-  updated_at: string;
+  is_active?: boolean; // если false, камера неактивна (красная на карте)
+  created_at: string; // ISO 8601 format with Z (UTC)
+  updated_at: string; // ISO 8601 format with Z (UTC)
 };
 
-type UpdateCameraBody = {
-  title?: string;
-  source?: string;
-  image_width?: number;
-  image_height?: number;
+export type CreateCameraRequest = {
+  title: string; // minLength: 1, maxLength: 200
+  source: string;
+  image_width: number; // minimum: 1
+  image_height: number; // minimum: 1
   calib?: any | null;
-  latitude?: number;
-  longitude?: number;
+  latitude: number; // -90 to 90
+  longitude: number; // -180 to 180
+};
+
+export type UpdateCameraRequest = {
+  title?: string; // minLength: 1, maxLength: 200
+  source?: string;
+  image_width?: number; // minimum: 1
+  image_height?: number; // minimum: 1
+  calib?: any | null;
+  latitude?: number; // -90 to 90
+  longitude?: number; // -180 to 180
+  is_active?: boolean;
+};
+
+export type CamerasNextResponse = {
+  camera_id: number;
+  source: string;
+  image_width: number;
+  image_height: number;
+  calib?: any | null;
+};
+
+export type ZonePoint = {
+  latitude: number; // -90 to 90
+  longitude: number; // -180 to 180
+  x: number; // minimum: 0
+  y: number; // minimum: 0
+};
+
+export type HealthResponse = {
+  status?: string;
+};
+
+export type VersionResponse = {
+  version?: string;
 };
 
 export const apiConfig = {
@@ -53,7 +93,11 @@ async function request<T>(method: 'GET'|'POST'|'PUT'|'DELETE', path: string, bod
 
   useRequestLog.getState().add({ id: id + '-resp', ts: Date.now(), method, url, status: res.status, response: data });
 
-  if (!res.ok) { throw new Error(data?.message || data?.error || `HTTP ${res.status}`); }
+  if (!res.ok) {
+    // Handle error according to Swagger Error schema
+    const errorMessage = data?.error_description || data?.error || data?.message || `HTTP ${res.status}`;
+    throw new Error(errorMessage);
+  }
   return data as T;
 }
 
@@ -62,6 +106,7 @@ const gp = (x:number, y:number, longitude:number|null=null, latitude:number|null
 const px = (p: GeoPoint): PxPoint => ({ x: p.x, y: p.y });
 
 function mapZoneFromAPI(z: any): ParkingZone {
+  // Points are ordered clockwise according to Swagger docs
   const pts = (z.points || []).map((p: any) => gp(+p.x, +p.y, p.longitude ?? null, p.latitude ?? null)) as GeoPoint[];
   const quad = pts.slice(0,4).map(px) as [PxPoint, PxPoint, PxPoint, PxPoint];
 
@@ -72,70 +117,134 @@ function mapZoneFromAPI(z: any): ParkingZone {
     capacity: +z.capacity,
     pay: +z.pay,
     image_quad: quad,
-    points: pts.slice(0,4) as any,
+    points: pts.slice(0,4) as any, // Preserve clockwise order
     created_at: z.created_at,
-    updated_at: z.updated_at
+    updated_at: z.updated_at,
+    occupied: z.occupied !== undefined ? +z.occupied : undefined,
+    confidence: z.confidence !== undefined ? +z.confidence : undefined
   };
 }
 
 function buildCreateZoneBody(z: ParkingZone) {
+  // Ensure exactly 4 points in clockwise order (as per Swagger requirement)
+  // Coordinates (latitude/longitude) are required by API
+  const points = z.points.slice(0, 4).map((p, idx) => {
+    if (p.latitude === null || p.longitude === null) {
+      throw new Error(`Point ${idx + 1} is missing coordinates (latitude/longitude). Please set coordinates on the map first.`);
+    }
+    return {
+      latitude: p.latitude,
+      longitude: p.longitude,
+      x: p.x,
+      y: p.y
+    } as ZonePoint;
+  });
+
   return {
     camera_id: z.camera_id,
     zone_type: z.zone_type,
     capacity: z.capacity,
     pay: z.pay,
-    points: z.points.map(p => ({
-      x: p.x, y: p.y, longitude: p.longitude, latitude: p.latitude
-    }))
+    points
   };
 }
 
 function buildUpdateZoneBody(z: ParkingZone) {
-  return {
-    zone_type: z.zone_type,
-    capacity: z.capacity,
-    pay: z.pay,
-    points: z.points.map(p => ({
-      x: p.x, y: p.y, longitude: p.longitude, latitude: p.latitude
-    }))
-  };
+  const body: any = {};
+  
+  if (z.zone_type !== undefined) body.zone_type = z.zone_type;
+  if (z.capacity !== undefined) body.capacity = z.capacity;
+  if (z.pay !== undefined) body.pay = z.pay;
+  if (z.occupied !== undefined) body.occupied = z.occupied;
+  if (z.confidence !== undefined) body.confidence = z.confidence;
+  if (z.camera_id !== undefined) body.camera_id = z.camera_id;
+  
+  // If points are provided, include them (maintaining clockwise order)
+  // Coordinates (latitude/longitude) are required by API
+  if (z.points && z.points.length === 4) {
+    body.points = z.points.map((p, idx) => {
+      if (p.latitude === null || p.longitude === null) {
+        throw new Error(`Point ${idx + 1} is missing coordinates (latitude/longitude). Please set coordinates on the map first.`);
+      }
+      return {
+        latitude: p.latitude,
+        longitude: p.longitude,
+        x: p.x,
+        y: p.y
+      } as ZonePoint;
+    });
+  }
+
+  return body;
 }
 
 // --- public API ---
 export const api = {
+  // --- Parking Zones ---
   async listZones(cameraId?: number) {
     const q = cameraId ? `?camera_id=${encodeURIComponent(cameraId)}` : '';
     const arr = await request<any[]>('GET', `/zones${q}`);
     return arr.map(mapZoneFromAPI);
   },
+  
+  async getZone(zoneId: Id) {
+    const z = await request<any>('GET', `/zones/${encodeURIComponent(String(zoneId))}`);
+    return mapZoneFromAPI(z);
+  },
+  
   async createZone(z: ParkingZone) {
     const resp = await request<any>('POST', `/zones/new`, buildCreateZoneBody(z));
-    return resp; // { zone_id } или полная зона — поддерживаем оба
+    return resp; // Returns { zone_id } or full zone object
   },
+  
   async updateZone(zoneId: Id, z: ParkingZone) {
     const updated = await request<any>('PUT', `/zones/${encodeURIComponent(String(zoneId))}`, buildUpdateZoneBody(z));
     return mapZoneFromAPI(updated);
   },
+  
   async deleteZone(zoneId: Id) {
     await request<void>('DELETE', `/zones/${encodeURIComponent(String(zoneId))}`);
   },
 
-  // --- cameras ---
+  // --- Cameras ---
   async listCameras() {
     return request<Camera[]>('GET', `/cameras`);
   },
+  
   async getCamera(cameraId: number) {
     return request<Camera>('GET', `/cameras/${encodeURIComponent(cameraId)}`);
   },
-  async updateCamera(cameraId: number, patch: UpdateCameraBody) {
+  
+  async createCamera(data: CreateCameraRequest) {
+    return request<Camera>('POST', `/cameras/new`, data);
+  },
+  
+  async updateCamera(cameraId: number, patch: UpdateCameraRequest) {
     return request<Camera>('PUT', `/cameras/${encodeURIComponent(cameraId)}`, patch);
   },
-
+  
+  async deleteCamera(cameraId: number) {
+    await request<void>('DELETE', `/cameras/${encodeURIComponent(cameraId)}`);
+  },
+  
+  async getNextCamera() {
+    return request<CamerasNextResponse>('GET', `/cameras/next`);
+  },
+  
   async getSnapshot(cameraId: number) {
     // Backend may return either raw image or JSON with image_url; here we assume JSON wrapper.
     return request<{ image_url: string; captured_at?: string; width?: number; height?: number }>(
       'GET',
       `/cameras/${encodeURIComponent(cameraId)}/snapshot`
     );
+  },
+
+  // --- System ---
+  async health() {
+    return request<HealthResponse>('GET', `/health`);
+  },
+  
+  async version() {
+    return request<VersionResponse>('GET', `/version`);
   }
 };

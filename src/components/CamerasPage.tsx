@@ -130,13 +130,15 @@ export default function CamerasPage() {
             return (
               <div
                 key={cam.camera_id}
-                className={`item ${isActive ? 'active' : ''} ${isHover ? 'hover' : ''}`}
+                className={`item ${isActive ? 'active' : ''} ${isHover ? 'hover' : ''} ${cam.is_active === false ? 'inactive' : ''}`}
                 onMouseEnter={() => setHoverId(cam.camera_id)}
                 onMouseLeave={() => setHoverId(id => (id === cam.camera_id ? undefined : id))}
                 onClick={() => setSelectedId(cam.camera_id)}
+                style={cam.is_active === false ? { borderLeft: '3px solid #ff4d4f' } : undefined}
               >
                 <div className="row" style={{ justifyContent: 'space-between' }}>
                   <div>{cam.title}</div>
+                  {cam.is_active === false && <span className="badge" style={{ background: '#ff4d4f', color: 'white' }}>Неактивна</span>}
                 </div>
                 <div className="small">ID: {cam.camera_id}</div>
                 <div className="small">Зон: {typeof zonesCount === 'number' ? zonesCount : '—'}</div>
@@ -163,7 +165,18 @@ export default function CamerasPage() {
           {cameras.filter(c => c.latitude && c.longitude).map(cam => {
             const isActive = cam.camera_id === selectedId;
             const isHover = cam.camera_id === hoverId;
-            const color = isActive ? '#ff7a45' : isHover ? '#ffd666' : '#2f54eb';
+            const isCameraActive = cam.is_active !== false; // по умолчанию активна, если не указано
+            // Если камера неактивна - красный цвет, иначе обычная логика
+            let color: string;
+            if (!isCameraActive) {
+              color = '#ff4d4f'; // красный для неактивных
+            } else if (isActive) {
+              color = '#ff7a45'; // оранжевый для выбранных
+            } else if (isHover) {
+              color = '#ffd666'; // желтый при наведении
+            } else {
+              color = '#2f54eb'; // синий по умолчанию
+            }
             const icon = L.divIcon({
               className: 'camera-marker',
               html: `<div style="width:${isActive ? 18 : 12}px;height:${isActive ? 18 : 12}px;border-radius:50%;background:${color};border:2px solid white;"></div>`,
