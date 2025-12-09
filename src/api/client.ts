@@ -231,12 +231,39 @@ export const api = {
     return request<CamerasNextResponse>('GET', `/cameras/next`);
   },
   
-  async getSnapshot(cameraId: number) {
-    // Backend may return either raw image or JSON with image_url; here we assume JSON wrapper.
-    return request<{ image_url: string; captured_at?: string; width?: number; height?: number }>(
-      'GET',
-      `/cameras/${encodeURIComponent(cameraId)}/snapshot`
-    );
+  async getSnapshot(cameraId: number): Promise<{ image_url: string; captured_at?: string; width?: number; height?: number }> {
+    // API возвращает бинарные данные изображения (JPEG), а не JSON
+    const url = `${cfg.baseUrl}/cameras/${encodeURIComponent(cameraId)}/snapshot`;
+    const headers: Record<string, string> = {};
+    if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`;
+
+    const id = crypto.randomUUID();
+    useRequestLog.getState().add({ id, ts: Date.now(), method: 'GET', url, headers });
+
+    const res = await fetch(url, { method: 'GET', headers });
+
+    useRequestLog.getState().add({ 
+      id: id + '-resp', 
+      ts: Date.now(), 
+      method: 'GET', 
+      url, 
+      status: res.status, 
+      response: `[Binary image data, ${res.headers.get('content-length') || 'unknown'} bytes]` 
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(errorText || `HTTP ${res.status}`);
+    }
+
+    // Создаем blob из бинарных данных
+    const blob = await res.blob();
+    const imageUrl = URL.createObjectURL(blob);
+
+    return {
+      image_url: imageUrl,
+      captured_at: res.headers.get('X-Captured-At') || undefined
+    };
   },
 
   // --- System ---

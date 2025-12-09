@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { api, Camera } from '@/api/client';
-import { Button } from './UiKit';
+import { api, Camera, CreateCameraRequest } from '@/api/client';
+import { Button, Field, Input } from './UiKit';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L, { LatLngExpression } from 'leaflet';
 
@@ -43,6 +43,8 @@ export default function CamerasPage() {
   const [selectedId, setSelectedId] = useState<number | undefined>();
   const [hoverId, setHoverId] = useState<number | undefined>();
   const [zoneCounts, setZoneCounts] = useState<Record<number, number>>({});
+  const [showAddCamera, setShowAddCamera] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,11 +106,52 @@ export default function CamerasPage() {
   }, [cameras]);
 
   function onEditCamera(cam: Camera) {
+    // Сначала устанавливаем cameraId
     setCamera(String(cam.camera_id));
-    // автоматически подтягиваем метаданные камеры и зоны
+    // Затем загружаем метаданные и зоны
     loadCameraMeta(cam.camera_id);
     store.loadZones();
+    // И только потом переключаемся на labeler (там автоматически загрузится изображение)
     setViewMode('labeler');
+  }
+
+  async function onDeleteCamera(cameraId: number) {
+    setDeletingId(cameraId);
+    try {
+      await api.deleteCamera(cameraId);
+      // Обновляем список камер
+      const list = await api.listCameras();
+      setCameras(list);
+      if (selectedId === cameraId) {
+        setSelectedId(undefined);
+      }
+    } catch (e: any) {
+      setError(`Ошибка удаления камеры: ${String(e)}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function onAddCamera(data: {
+    title: string;
+    source: string;
+    image_width: number;
+    image_height: number;
+    latitude: number;
+    longitude: number;
+    calib?: any;
+  }) {
+    try {
+      setLoading(true);
+      setError(undefined);
+      const newCamera = await api.createCamera(data);
+      setCameras([...cameras, newCamera]);
+      setShowAddCamera(false);
+    } catch (e: any) {
+      setError(`Ошибка создания камеры: ${String(e)}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -117,6 +160,10 @@ export default function CamerasPage() {
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
           <h4>Камеры</h4>
           <Button className="ghost" onClick={() => setViewMode('labeler')}>Вернуться к разметке</Button>
+        </div>
+
+        <div className="row" style={{ marginBottom: 12, gap: 8 }}>
+          <Button onClick={() => setShowAddCamera(true)}>+ Добавить камеру</Button>
         </div>
 
         {loading && <div className="small">Загрузка камер…</div>}
@@ -144,6 +191,18 @@ export default function CamerasPage() {
                 <div className="small">Зон: {typeof zonesCount === 'number' ? zonesCount : '—'}</div>
                 <div className="row" style={{ marginTop: 6, gap: 6 }}>
                   <Button onClick={() => onEditCamera(cam)}>Редактировать</Button>
+                  <Button 
+                    className="danger" 
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (confirm(`Удалить камеру "${cam.title}"? Это действие нельзя отменить.`)) {
+                        await onDeleteCamera(cam.camera_id);
+                      }
+                    }}
+                    disabled={deletingId === cam.camera_id}
+                  >
+                    {deletingId === cam.camera_id ? 'Удаление...' : 'Удалить'}
+                  </Button>
                 </div>
                 {isHover && <div className="small">Наведи на метку на карте, чтобы увидеть камеру</div>}
               </div>
@@ -153,6 +212,14 @@ export default function CamerasPage() {
             <div className="small">Камеры не найдены</div>
           )}
         </div>
+
+        {showAddCamera && (
+          <AddCameraForm 
+            onSave={onAddCamera} 
+            onCancel={() => setShowAddCamera(false)} 
+            loading={loading}
+          />
+        )}
       </div>
 
       <div className="canvas">
@@ -209,5 +276,121 @@ export default function CamerasPage() {
         </MapContainer>
       </div>
     </>
+  );
+}
+
+function AddCameraForm({ 
+  onSave, 
+  onCancel, 
+  loading 
+}: { 
+  onSave: (data: CreateCameraRequest) => void; 
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const [title, setTitle] = useState('');
+  const [source, setSource] = useState('');
+  const [imageWidth, setImageWidth] = useState('1920');
+  const [imageHeight, setImageHeight] = useState('1080');
+  const [latitude, setLatitude] = useState('59.9386');
+  const [longitude, setLongitude] = useState('30.3141');
+  const [calib, setCalib] = useState('');
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    let calibParsed: any = null;
+    if (calib.trim()) {
+      try {
+        calibParsed = JSON.parse(calib);
+      } catch {
+        alert('Ошибка парсинга JSON в calib');
+        return;
+      }
+    }
+    onSave({
+      title: title.trim(),
+      source: source.trim(),
+      image_width: parseInt(imageWidth, 10),
+      image_height: parseInt(imageHeight, 10),
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      calib: calibParsed
+    });
+  }
+
+  return (
+    <div style={{ marginTop: 16, padding: 12, border: '1px solid #ddd', borderRadius: 4 }}>
+      <h4 style={{ marginTop: 0 }}>Добавить камеру</h4>
+      <form onSubmit={handleSubmit}>
+        <Field label="Title *">
+          <Input 
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Название камеры"
+            required
+          />
+        </Field>
+        <Field label="Source (видеопоток) *">
+          <Input 
+            value={source}
+            onChange={e => setSource(e.target.value)}
+            placeholder="https://... или rtsp://..."
+            required
+          />
+        </Field>
+        <Field label="Image Width *">
+          <Input 
+            type="number"
+            min={1}
+            value={imageWidth}
+            onChange={e => setImageWidth(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Image Height *">
+          <Input 
+            type="number"
+            min={1}
+            value={imageHeight}
+            onChange={e => setImageHeight(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Latitude *">
+          <Input 
+            type="number"
+            step="any"
+            value={latitude}
+            onChange={e => setLatitude(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Longitude *">
+          <Input 
+            type="number"
+            step="any"
+            value={longitude}
+            onChange={e => setLongitude(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Calib (JSON, опционально)">
+          <textarea
+            className="input"
+            value={calib}
+            onChange={e => setCalib(e.target.value)}
+            placeholder='{"image_width": 1920, ...}'
+            rows={4}
+            style={{ fontFamily: 'monospace', fontSize: '12px' }}
+          />
+        </Field>
+        <div className="row" style={{ marginTop: 12, gap: 8 }}>
+          <Button type="submit" disabled={loading || !title.trim() || !source.trim()}>
+            {loading ? 'Создание...' : 'Создать'}
+          </Button>
+          <Button type="button" className="ghost" onClick={onCancel}>Отмена</Button>
+        </div>
+      </form>
+    </div>
   );
 }

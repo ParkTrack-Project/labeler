@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Button } from './UiKit';
-import { MapContainer, TileLayer, Polygon, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L, { LatLng, LatLngExpression } from 'leaflet';
 
 type LatLngTuple = [number, number];
@@ -12,6 +12,18 @@ function ClickHandler({ onClick }: { onClick: (pos: LatLng) => void }) {
       onClick(e.latlng);
     }
   });
+  return null;
+}
+
+function MapAutoFit({ points }: { points: LatLng[] }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (points.length === 0) return;
+    const bounds = L.latLngBounds(points);
+    map.fitBounds(bounds.pad(0.2));
+  }, [points, map]);
+
   return null;
 }
 
@@ -47,7 +59,21 @@ export default function ZoneMapSelector() {
   function onMapClick(pos: LatLng) {
     setPoints(prev => {
       if (prev.length >= 4) return prev; // ограничиваемся 4 точками
-      return [...prev, pos];
+      const newPoints = [...prev, pos];
+      
+      // Синхронизируем с store при добавлении точки
+      if (zone && newPoints.length <= 4) {
+        const updatedZonePoints = zone.points.map((pt, i) => {
+          if (i < newPoints.length) {
+            const p = newPoints[i];
+            return { ...pt, latitude: p.lat, longitude: p.lng };
+          }
+          return pt;
+        }) as any;
+        store.updateZone(zone.id, { points: updatedZonePoints });
+      }
+      
+      return newPoints;
     });
   }
 
@@ -119,6 +145,7 @@ export default function ZoneMapSelector() {
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <MapAutoFit points={points} />
           <ClickHandler onClick={onMapClick} />
           {polygon.length > 0 && <Polygon positions={polygon} pathOptions={{ color: '#ff7a45' }} />}
           {points.map((p, idx) => (
@@ -131,6 +158,26 @@ export default function ZoneMapSelector() {
                 iconSize: [12, 12],
                 iconAnchor: [6, 6]
               })}
+              draggable
+              eventHandlers={{
+                dragend: (e) => {
+                  const newPos = e.target.getLatLng();
+                  const updatedPoints = points.map((pt, i) => i === idx ? new L.LatLng(newPos.lat, newPos.lng) : pt);
+                  setPoints(updatedPoints);
+                  
+                  // Синхронизируем изменения с store в реальном времени
+                  if (zone && updatedPoints.length === 4) {
+                    const updatedZonePoints = zone.points.map((pt, i) => {
+                      if (i < 4) {
+                        const p = updatedPoints[i];
+                        return { ...pt, latitude: p.lat, longitude: p.lng };
+                      }
+                      return pt;
+                    }) as any;
+                    store.updateZone(zone.id, { points: updatedZonePoints });
+                  }
+                }
+              }}
             />
           ))}
         </MapContainer>

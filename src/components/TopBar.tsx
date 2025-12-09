@@ -1,11 +1,13 @@
 import { useStore } from '@/store/useStore';
 import { apiConfig, api } from '@/api/client';
 import { Button, Field, Input, FilePicker } from './UiKit';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export default function TopBar() {
-  const { apiBase, token, cameraId, viewMode, setViewMode, setImage } = useStore();
+  const { apiBase, token, cameraId, viewMode, setViewMode, setImage, image } = useStore();
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [loadingSnapshot, setLoadingSnapshot] = useState(false);
+  const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
     apiConfig.set(apiBase, token);
@@ -19,21 +21,46 @@ export default function TopBar() {
     fitToView(img);
   }
 
-  async function loadByCameraId() {
+  const loadByCameraId = useCallback(async () => {
     if (!cameraId) return;
+    setLoadingSnapshot(true);
     try {
+      // Убеждаемся, что API настроен перед запросом
+      apiConfig.set(apiBase, token);
       const snap = await api.getSnapshot(parseInt(cameraId, 10));
-      const url = snap?.image_url || '/sample.jpg';
-      const img = await loadImage(url);
-      setImage(img);
-      fitToView(img);
-    } catch {
+      
+      if (snap?.image_url) {
+        // Очищаем предыдущий blob URL, если он был
+        if (currentBlobUrl && currentBlobUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(currentBlobUrl);
+        }
+        
+        // image_url теперь является blob URL, созданным из бинарных данных
+        setCurrentBlobUrl(snap.image_url);
+        const img = await loadImage(snap.image_url);
+        setImage(img);
+        fitToView(img);
+      } else {
+        console.warn('Snapshot не содержит image_url, используем fallback');
+        // fallback: локальная картинка для дев-режима
+        const img = await loadImage('/sample.jpg');
+        setImage(img);
+        fitToView(img);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки snapshot:', error);
       // fallback: локальная картинка для дев-режима
-      const img = await loadImage('/sample.jpg');
-      setImage(img);
-      fitToView(img);
+      try {
+        const img = await loadImage('/sample.jpg');
+        setImage(img);
+        fitToView(img);
+      } catch (fallbackError) {
+        console.error('Ошибка загрузки fallback изображения:', fallbackError);
+      }
+    } finally {
+      setLoadingSnapshot(false);
     }
-  }
+  }, [cameraId, apiBase, token, setImage, currentBlobUrl]);
 
   function fitToView(_img: { naturalWidth: number; naturalHeight: number; url: string }) {
     useStore.getState().setView(1, 0, 0);
@@ -41,12 +68,25 @@ export default function TopBar() {
 
   const isLabeler = viewMode === 'labeler';
 
+  // Очистка blob URL при размонтировании или изменении изображения
+  useEffect(() => {
+    return () => {
+      if (currentBlobUrl && currentBlobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentBlobUrl);
+      }
+    };
+  }, [currentBlobUrl]);
+
   // при входе в labeler с выбранной камерой — автоматически загружаем снапшот
   useEffect(() => {
     if (viewMode === 'labeler' && cameraId) {
-      loadByCameraId();
+      // Небольшая задержка для гарантии, что API конфиг применен
+      const timer = setTimeout(() => {
+        loadByCameraId();
+      }, 150);
+      return () => clearTimeout(timer);
     }
-  }, [viewMode, cameraId]);
+  }, [viewMode, cameraId, loadByCameraId]);
 
   return (
     <div className="topbar">
@@ -86,7 +126,7 @@ placeholder="https://api.parktrack.live"
 
         {isLabeler && (
           <Field label="Image URL">
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row" style={{ gap: 6, alignItems: 'center' }}>
               <Input
                 style={{ minWidth: 320 }}
                 value={imageUrlInput}
@@ -94,6 +134,7 @@ placeholder="https://api.parktrack.live"
                 placeholder="http://…/frame.jpg"
               />
               <Button onClick={loadImageFromUrl}>Открыть</Button>
+              {loadingSnapshot && <span className="small">Загрузка snapshot...</span>}
             </div>
           </Field>
         )}
