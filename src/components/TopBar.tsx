@@ -1,13 +1,14 @@
 import { useStore } from '@/store/useStore';
 import { apiConfig, api } from '@/api/client';
 import { Button, Field, Input, FilePicker } from './UiKit';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 export default function TopBar() {
   const { apiBase, token, cameraId, viewMode, setViewMode, setImage, image } = useStore();
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
-  const [currentBlobUrl, setCurrentBlobUrl] = useState<string | null>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
+  const loadedCameraIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     apiConfig.set(apiBase, token);
@@ -23,6 +24,12 @@ export default function TopBar() {
 
   const loadByCameraId = useCallback(async () => {
     if (!cameraId) return;
+    
+    // Проверяем, не загружали ли мы уже snapshot для этого cameraId
+    if (loadedCameraIdRef.current === cameraId && image?.url) {
+      return; // Уже загружено, пропускаем
+    }
+    
     setLoadingSnapshot(true);
     try {
       // Убеждаемся, что API настроен перед запросом
@@ -31,12 +38,13 @@ export default function TopBar() {
       
       if (snap?.image_url) {
         // Очищаем предыдущий blob URL, если он был
-        if (currentBlobUrl && currentBlobUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(currentBlobUrl);
+        if (currentBlobUrlRef.current && currentBlobUrlRef.current.startsWith('blob:')) {
+          URL.revokeObjectURL(currentBlobUrlRef.current);
         }
         
         // image_url теперь является blob URL, созданным из бинарных данных
-        setCurrentBlobUrl(snap.image_url);
+        currentBlobUrlRef.current = snap.image_url;
+        loadedCameraIdRef.current = cameraId;
         const img = await loadImage(snap.image_url);
         setImage(img);
         fitToView(img);
@@ -60,7 +68,7 @@ export default function TopBar() {
     } finally {
       setLoadingSnapshot(false);
     }
-  }, [cameraId, apiBase, token, setImage, currentBlobUrl]);
+  }, [cameraId, apiBase, token, setImage, image]);
 
   function fitToView(_img: { naturalWidth: number; naturalHeight: number; url: string }) {
     useStore.getState().setView(1, 0, 0);
@@ -68,16 +76,23 @@ export default function TopBar() {
 
   const isLabeler = viewMode === 'labeler';
 
-  // Очистка blob URL при размонтировании или изменении изображения
+  // Очистка blob URL при размонтировании
   useEffect(() => {
     return () => {
-      if (currentBlobUrl && currentBlobUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(currentBlobUrl);
+      if (currentBlobUrlRef.current && currentBlobUrlRef.current.startsWith('blob:')) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
       }
     };
-  }, [currentBlobUrl]);
+  }, []);
 
-  // при входе в labeler с выбранной камерой — автоматически загружаем снапшот
+  // Сброс загруженного cameraId при изменении cameraId или viewMode
+  useEffect(() => {
+    if (viewMode !== 'labeler' || !cameraId) {
+      loadedCameraIdRef.current = null;
+    }
+  }, [viewMode, cameraId]);
+
+  // при входе в labeler с выбранной камерой — автоматически загружаем снапшот (только один раз)
   useEffect(() => {
     if (viewMode === 'labeler' && cameraId) {
       // Небольшая задержка для гарантии, что API конфиг применен
