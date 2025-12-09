@@ -195,7 +195,8 @@ export const api = {
   },
   
   async createZone(z: ParkingZone) {
-    const resp = await request<any>('POST', `/zones/new`, buildCreateZoneBody(z));
+    const body = buildCreateZoneBody(z);
+    const resp = await request<any>('POST', `/zones/new`, body);
     return resp; // Returns { zone_id } or full zone object
   },
   
