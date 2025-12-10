@@ -25,45 +25,41 @@ export default function TopBar() {
   const loadByCameraId = useCallback(async () => {
     if (!cameraId) return;
     
-    // Проверяем, не загружали ли мы уже snapshot для этого cameraId
+    // Prevent duplicate loads for the same camera
     if (loadedCameraIdRef.current === cameraId && image?.url) {
-      return; // Уже загружено, пропускаем
+      return;
     }
     
     setLoadingSnapshot(true);
     try {
-      // Убеждаемся, что API настроен перед запросом
       apiConfig.set(apiBase, token);
       const snap = await api.getSnapshot(parseInt(cameraId, 10));
       
       if (snap?.image_url) {
-        // Очищаем предыдущий blob URL, если он был
+        // Clean up previous blob URL to prevent memory leaks
         if (currentBlobUrlRef.current && currentBlobUrlRef.current.startsWith('blob:')) {
           URL.revokeObjectURL(currentBlobUrlRef.current);
         }
         
-        // image_url теперь является blob URL, созданным из бинарных данных
         currentBlobUrlRef.current = snap.image_url;
         loadedCameraIdRef.current = cameraId;
         const img = await loadImage(snap.image_url);
         setImage(img);
         fitToView(img);
       } else {
-        console.warn('Snapshot не содержит image_url, используем fallback');
-        // fallback: локальная картинка для дев-режима
+        console.warn('Snapshot missing image_url, using fallback');
         const img = await loadImage('/sample.jpg');
         setImage(img);
         fitToView(img);
       }
     } catch (error) {
-      console.error('Ошибка загрузки snapshot:', error);
-      // fallback: локальная картинка для дев-режима
+      console.error('Error loading snapshot:', error);
       try {
         const img = await loadImage('/sample.jpg');
         setImage(img);
         fitToView(img);
       } catch (fallbackError) {
-        console.error('Ошибка загрузки fallback изображения:', fallbackError);
+        console.error('Error loading fallback image:', fallbackError);
       }
     } finally {
       setLoadingSnapshot(false);
@@ -71,14 +67,12 @@ export default function TopBar() {
   }, [cameraId, apiBase, token, setImage, image]);
 
   function fitToView(img: { naturalWidth: number; naturalHeight: number; url: string }) {
-    // Устанавливаем масштаб 1 и центрируем изображение
-    // Реальное масштабирование будет выполнено в ImageViewport при монтировании
     useStore.getState().setView(1, 0, 0);
   }
 
   const isLabeler = viewMode === 'labeler';
 
-  // Очистка blob URL при размонтировании
+  // Cleanup blob URLs on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
       if (currentBlobUrlRef.current && currentBlobUrlRef.current.startsWith('blob:')) {
@@ -87,17 +81,14 @@ export default function TopBar() {
     };
   }, []);
 
-  // Сброс загруженного cameraId при изменении cameraId или viewMode
   useEffect(() => {
     if (viewMode !== 'labeler' || !cameraId) {
       loadedCameraIdRef.current = null;
     }
   }, [viewMode, cameraId]);
 
-  // при входе в labeler с выбранной камерой — автоматически загружаем снапшот (только один раз)
   useEffect(() => {
     if (viewMode === 'labeler' && cameraId) {
-      // Небольшая задержка для гарантии, что API конфиг применен
       const timer = setTimeout(() => {
         loadByCameraId();
       }, 150);

@@ -8,17 +8,19 @@ export function area(poly: PxPoint[]): number {
   }
   return 0.5 * s;
 }
+// In screen coordinates (Y down), clockwise polygons have negative area
 export function isClockwise(poly: PxPoint[]): boolean {
-  return area(poly) < 0; // экранная Y вниз -> cw будет отриц
+  return area(poly) < 0;
 }
+// Sort 4 points in clockwise order by angle from center
 export function clockwiseSort(quad: [PxPoint, PxPoint, PxPoint, PxPoint]) {
-  // Простейшая нормализация: сортируем по центру+углу
   const cx = quad.reduce((s,p)=>s+p.x,0)/4;
   const cy = quad.reduce((s,p)=>s+p.y,0)/4;
+  // Sort by angle from center
   const withAng = quad.map(p => ({ p, a: Math.atan2(p.y-cy, p.x-cx) }));
   withAng.sort((u,v)=>u.a - v.a);
   const arr = withAng.map(w => w.p) as [PxPoint, PxPoint, PxPoint, PxPoint];
-  // перевод в clockwise (для экранных координат)
+  // Reverse if counter-clockwise
   return isClockwise(arr) ? arr : ([arr[0], arr[3], arr[2], arr[1]] as any);
 }
 

@@ -69,7 +69,6 @@ export default function CameraMapSelector() {
     load();
   }, [cameraId]);
 
-  // Обновляем инпуты при изменении точки на карте
   useEffect(() => {
     if (point) {
       setLatInput(point.lat.toString());

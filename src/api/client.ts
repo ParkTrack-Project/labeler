@@ -19,7 +19,7 @@ export type Camera = {
   calib: any | null;
   latitude: number;
   longitude: number;
-  is_active?: boolean; // если false, камера неактивна (красная на карте)
+  is_active?: boolean;
   created_at: string; // ISO 8601 format with Z (UTC)
   updated_at: string; // ISO 8601 format with Z (UTC)
 };
@@ -106,7 +106,6 @@ const gp = (x:number, y:number, longitude:number|null=null, latitude:number|null
 const px = (p: GeoPoint): PxPoint => ({ x: p.x, y: p.y });
 
 function mapZoneFromAPI(z: any): ParkingZone {
-  // Points are ordered clockwise according to Swagger docs
   const pts = (z.points || []).map((p: any) => gp(+p.x, +p.y, p.longitude ?? null, p.latitude ?? null)) as GeoPoint[];
   const quad = pts.slice(0,4).map(px) as [PxPoint, PxPoint, PxPoint, PxPoint];
 
@@ -126,9 +125,6 @@ function mapZoneFromAPI(z: any): ParkingZone {
 }
 
 function buildCreateZoneBody(z: ParkingZone) {
-  // Ensure exactly 4 points in clockwise order (as per Swagger requirement)
-  // Coordinates (latitude/longitude) are required by API
-  // x and y must be integers according to API spec
   const points = z.points.slice(0, 4).map((p, idx) => {
     if (p.latitude === null || p.longitude === null) {
       throw new Error(`Point ${idx + 1} is missing coordinates (latitude/longitude). Please set coordinates on the map first.`);
@@ -136,6 +132,7 @@ function buildCreateZoneBody(z: ParkingZone) {
     return {
       latitude: p.latitude,
       longitude: p.longitude,
+      // API requires integer coordinates, not floats
       x: Math.round(p.x),
       y: Math.round(p.y)
     } as ZonePoint;
@@ -160,9 +157,6 @@ function buildUpdateZoneBody(z: ParkingZone) {
   if (z.confidence !== undefined) body.confidence = z.confidence;
   if (z.camera_id !== undefined) body.camera_id = z.camera_id;
   
-  // If points are provided, include them (maintaining clockwise order)
-  // Coordinates (latitude/longitude) are required by API
-  // x and y must be integers according to API spec
   if (z.points && z.points.length === 4) {
     body.points = z.points.map((p, idx) => {
       if (p.latitude === null || p.longitude === null) {
@@ -171,6 +165,7 @@ function buildUpdateZoneBody(z: ParkingZone) {
       return {
         latitude: p.latitude,
         longitude: p.longitude,
+        // API requires integer coordinates, not floats
         x: Math.round(p.x),
         y: Math.round(p.y)
       } as ZonePoint;
@@ -235,7 +230,7 @@ export const api = {
   },
   
   async getSnapshot(cameraId: number): Promise<{ image_url: string; captured_at?: string; width?: number; height?: number }> {
-    // API возвращает бинарные данные изображения (JPEG), а не JSON
+    // API returns binary image data (JPEG), not JSON
     const url = `${cfg.baseUrl}/cameras/${encodeURIComponent(cameraId)}/snapshot`;
     const headers: Record<string, string> = {};
     if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`;
@@ -259,7 +254,7 @@ export const api = {
       throw new Error(errorText || `HTTP ${res.status}`);
     }
 
-    // Создаем blob из бинарных данных
+    // Convert binary response to blob URL for display
     const blob = await res.blob();
     const imageUrl = URL.createObjectURL(blob);
 
