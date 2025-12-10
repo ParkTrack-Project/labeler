@@ -15,11 +15,11 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 .app {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  grid-template-columns: 280px 1fr 360px;
+  grid-template-columns: 280px 1fr;
   grid-template-areas:
-    "topbar topbar topbar"
-    "sidebar canvas reqlog"
-    "sidebar canvas reqlog";
+    "topbar topbar"
+    "sidebar canvas"
+    "sidebar canvas";
   height: 100%;
 }
 

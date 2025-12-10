@@ -29,7 +29,7 @@ function MapAutoFit({ points }: { points: LatLng[] }) {
 
 export default function ZoneMapSelector() {
   const store = useStore();
-  const { cameraId, zones, activeZoneId, setViewMode } = store;
+  const { cameraId, zones, activeZoneId, setViewMode, cameraMeta } = store;
   const zone = zones.find(z => String(z.id) === String(activeZoneId));
 
   const [points, setPoints] = useState<LatLng[]>([]);
@@ -37,12 +37,24 @@ export default function ZoneMapSelector() {
   const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!zone) return;
+    if (!zone) {
+      setPoints([]);
+      return;
+    }
+    // Загружаем только те точки, у которых есть уникальные координаты (не все одинаковые)
     const existing = zone.points
       .filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number')
       .slice(0, 4) as any[];
-    if (existing.length === 4) {
+    
+    // Проверяем, что координаты не все одинаковые (что может быть, если использовались координаты камеры)
+    const uniqueCoords = new Set(existing.map(p => `${p.latitude},${p.longitude}`));
+    
+    if (existing.length === 4 && uniqueCoords.size > 1) {
+      // Есть 4 точки с разными координатами - загружаем их
       setPoints(existing.map(p => new L.LatLng(p.latitude!, p.longitude!)));
+    } else {
+      // Нет валидных точек или все одинаковые - начинаем с пустого списка
+      setPoints([]);
     }
   }, [zone]);
 
@@ -52,37 +64,39 @@ export default function ZoneMapSelector() {
       const lng = points.reduce((s, p) => s + p.lng, 0) / points.length;
       return [lat, lng];
     }
+    // Если точек нет, используем координаты камеры
+    if (cameraMeta && cameraMeta.latitude && cameraMeta.longitude) {
+      return [cameraMeta.latitude, cameraMeta.longitude];
+    }
     // fallback: city center
     return [59.9386, 30.3141];
-  }, [points]);
+  }, [points, cameraMeta]);
 
   function onMapClick(pos: LatLng) {
     setPoints(prev => {
       if (prev.length >= 4) return prev; // ограничиваемся 4 точками
-      const newPoints = [...prev, pos];
-      
-      // Синхронизируем с store при добавлении точки
-      if (zone && newPoints.length <= 4) {
-        const updatedZonePoints = zone.points.map((pt, i) => {
-          if (i < newPoints.length) {
-            const p = newPoints[i];
-            return { ...pt, latitude: p.lat, longitude: p.lng };
-          }
-          return pt;
-        }) as any;
-        store.updateZone(zone.id, { points: updatedZonePoints });
-      }
-      
-      return newPoints;
+      return [...prev, pos];
     });
   }
 
   function onReset() {
     setPoints([]);
+    // Сбрасываем координаты в store для точек, которые еще не установлены
+    if (zone) {
+      const resetPoints = zone.points.map((pt, i) => {
+        // Оставляем только пиксельные координаты, сбрасываем географические
+        return { ...pt, latitude: null, longitude: null };
+      }) as any;
+      store.updateZone(zone.id, { points: resetPoints });
+    }
   }
 
   async function onSave() {
-    if (!zone || points.length !== 4) return;
+    if (!zone) return;
+    if (points.length !== 4) {
+      setError('Необходимо отметить все 4 точки на карте перед сохранением');
+      return;
+    }
     try {
       setLoading(true);
       setError(undefined);
@@ -147,7 +161,18 @@ export default function ZoneMapSelector() {
           />
           <MapAutoFit points={points} />
           <ClickHandler onClick={onMapClick} />
-          {polygon.length > 0 && <Polygon positions={polygon} pathOptions={{ color: '#ff7a45' }} />}
+          {polygon.length > 0 && (
+            <>
+              {points.length === 4 ? (
+                <Polygon positions={polygon} pathOptions={{ color: '#ff7a45', fillOpacity: 0.2 }} />
+              ) : (
+                <Polygon 
+                  positions={polygon} 
+                  pathOptions={{ color: '#ff7a45', fillOpacity: 0, dashArray: '10, 5', weight: 2 }} 
+                />
+              )}
+            </>
+          )}
           {points.map((p, idx) => (
             <Marker
               key={idx}
@@ -165,7 +190,7 @@ export default function ZoneMapSelector() {
                   const updatedPoints = points.map((pt, i) => i === idx ? new L.LatLng(newPos.lat, newPos.lng) : pt);
                   setPoints(updatedPoints);
                   
-                  // Синхронизируем изменения с store в реальном времени
+                  // Синхронизируем изменения с store в реальном времени только если все 4 точки установлены
                   if (zone && updatedPoints.length === 4) {
                     const updatedZonePoints = zone.points.map((pt, i) => {
                       if (i < 4) {

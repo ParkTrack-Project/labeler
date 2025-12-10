@@ -145,7 +145,9 @@ export default function CamerasPage() {
       setLoading(true);
       setError(undefined);
       const newCamera = await api.createCamera(data);
-      setCameras([...cameras, newCamera]);
+      // Обновляем список камер, перезагружая с сервера для получения актуальных данных
+      const updatedList = await api.listCameras();
+      setCameras(updatedList);
       setShowAddCamera(false);
     } catch (e: any) {
       setError(`Ошибка создания камеры: ${String(e)}`);

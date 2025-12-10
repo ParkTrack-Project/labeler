@@ -1,7 +1,6 @@
 import TopBar from '@/components/TopBar';
 import ImageViewport from '@/components/ImageViewport';
 import Sidebar from '@/components/Sidebar';
-import RequestLogPanel from '@/components/RequestLogPanel';
 import CamerasPage from '@/components/CamerasPage';
 import CameraMapSelector from '@/components/CameraMapSelector';
 import ZoneMapSelector from '@/components/ZoneMapSelector';
@@ -30,7 +29,6 @@ export default function App() {
     <div className="app">
       <TopBar />
       {main}
-      <RequestLogPanel />
     </div>
   );
 }
