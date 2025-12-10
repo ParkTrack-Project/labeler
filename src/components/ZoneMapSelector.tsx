@@ -29,7 +29,7 @@ function MapAutoFit({ points }: { points: LatLng[] }) {
 
 export default function ZoneMapSelector() {
   const store = useStore();
-  const { cameraId, zones, activeZoneId, setViewMode } = store;
+  const { cameraId, zones, activeZoneId, setViewMode, cameraMeta } = store;
   const zone = zones.find(z => String(z.id) === String(activeZoneId));
 
   const [points, setPoints] = useState<LatLng[]>([]);
@@ -64,9 +64,13 @@ export default function ZoneMapSelector() {
       const lng = points.reduce((s, p) => s + p.lng, 0) / points.length;
       return [lat, lng];
     }
+    // Если точек нет, используем координаты камеры
+    if (cameraMeta && cameraMeta.latitude && cameraMeta.longitude) {
+      return [cameraMeta.latitude, cameraMeta.longitude];
+    }
     // fallback: city center
     return [59.9386, 30.3141];
-  }, [points]);
+  }, [points, cameraMeta]);
 
   function onMapClick(pos: LatLng) {
     setPoints(prev => {
@@ -88,7 +92,11 @@ export default function ZoneMapSelector() {
   }
 
   async function onSave() {
-    if (!zone || points.length !== 4) return;
+    if (!zone) return;
+    if (points.length !== 4) {
+      setError('Необходимо отметить все 4 точки на карте перед сохранением');
+      return;
+    }
     try {
       setLoading(true);
       setError(undefined);
@@ -153,7 +161,18 @@ export default function ZoneMapSelector() {
           />
           <MapAutoFit points={points} />
           <ClickHandler onClick={onMapClick} />
-          {polygon.length > 0 && <Polygon positions={polygon} pathOptions={{ color: '#ff7a45' }} />}
+          {polygon.length > 0 && (
+            <>
+              {points.length === 4 ? (
+                <Polygon positions={polygon} pathOptions={{ color: '#ff7a45', fillOpacity: 0.2 }} />
+              ) : (
+                <Polygon 
+                  positions={polygon} 
+                  pathOptions={{ color: '#ff7a45', fillOpacity: 0, dashArray: '10, 5', weight: 2 }} 
+                />
+              )}
+            </>
+          )}
           {points.map((p, idx) => (
             <Marker
               key={idx}

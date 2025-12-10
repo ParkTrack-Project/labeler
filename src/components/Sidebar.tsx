@@ -62,8 +62,18 @@ export default function Sidebar() {
     if (!camera?.camera_id) return;
     try {
       const snap = await api.getSnapshot(camera.camera_id);
-      if (snap.width) setCameraImageWidth(snap.width.toString());
-      if (snap.height) setCameraImageHeight(snap.height.toString());
+      if (snap?.image_url) {
+        // Загружаем изображение для получения его размеров
+        const img = new Image();
+        img.onload = () => {
+          setCameraImageWidth(img.naturalWidth.toString());
+          setCameraImageHeight(img.naturalHeight.toString());
+        };
+        img.onerror = () => {
+          s.error = 'Ошибка загрузки изображения для получения размеров';
+        };
+        img.src = snap.image_url;
+      }
     } catch (e: any) {
       s.error = String(e);
     }
@@ -227,8 +237,11 @@ export default function Sidebar() {
             </Select>
           </Field>
           <Field label="Capacity">
-            <Input type="number" min={0} value={zone.capacity}
-              onChange={e=>s.updateZone(zone.id,{capacity: parseInt(e.target.value||'0',10)})}/>
+            <Input type="number" min={1} value={zone.capacity}
+              onChange={e=>{
+                const val = parseInt(e.target.value||'1',10);
+                s.updateZone(zone.id,{capacity: Math.max(1, val)});
+              }}/>
           </Field>
           <Field label="Pay">
             <Input type="number" min={0} value={zone.pay}
