@@ -37,12 +37,24 @@ export default function ZoneMapSelector() {
   const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!zone) return;
+    if (!zone) {
+      setPoints([]);
+      return;
+    }
+    // Загружаем только те точки, у которых есть уникальные координаты (не все одинаковые)
     const existing = zone.points
       .filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number')
       .slice(0, 4) as any[];
-    if (existing.length === 4) {
+    
+    // Проверяем, что координаты не все одинаковые (что может быть, если использовались координаты камеры)
+    const uniqueCoords = new Set(existing.map(p => `${p.latitude},${p.longitude}`));
+    
+    if (existing.length === 4 && uniqueCoords.size > 1) {
+      // Есть 4 точки с разными координатами - загружаем их
       setPoints(existing.map(p => new L.LatLng(p.latitude!, p.longitude!)));
+    } else {
+      // Нет валидных точек или все одинаковые - начинаем с пустого списка
+      setPoints([]);
     }
   }, [zone]);
 
@@ -59,26 +71,20 @@ export default function ZoneMapSelector() {
   function onMapClick(pos: LatLng) {
     setPoints(prev => {
       if (prev.length >= 4) return prev; // ограничиваемся 4 точками
-      const newPoints = [...prev, pos];
-      
-      // Синхронизируем с store при добавлении точки
-      if (zone && newPoints.length <= 4) {
-        const updatedZonePoints = zone.points.map((pt, i) => {
-          if (i < newPoints.length) {
-            const p = newPoints[i];
-            return { ...pt, latitude: p.lat, longitude: p.lng };
-          }
-          return pt;
-        }) as any;
-        store.updateZone(zone.id, { points: updatedZonePoints });
-      }
-      
-      return newPoints;
+      return [...prev, pos];
     });
   }
 
   function onReset() {
     setPoints([]);
+    // Сбрасываем координаты в store для точек, которые еще не установлены
+    if (zone) {
+      const resetPoints = zone.points.map((pt, i) => {
+        // Оставляем только пиксельные координаты, сбрасываем географические
+        return { ...pt, latitude: null, longitude: null };
+      }) as any;
+      store.updateZone(zone.id, { points: resetPoints });
+    }
   }
 
   async function onSave() {
@@ -165,7 +171,7 @@ export default function ZoneMapSelector() {
                   const updatedPoints = points.map((pt, i) => i === idx ? new L.LatLng(newPos.lat, newPos.lng) : pt);
                   setPoints(updatedPoints);
                   
-                  // Синхронизируем изменения с store в реальном времени
+                  // Синхронизируем изменения с store в реальном времени только если все 4 точки установлены
                   if (zone && updatedPoints.length === 4) {
                     const updatedZonePoints = zone.points.map((pt, i) => {
                       if (i < 4) {
