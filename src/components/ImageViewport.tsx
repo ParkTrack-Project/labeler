@@ -11,6 +11,7 @@ export default function ImageViewport() {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 100, h: 100 });
+  const lastImageUrlRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     function onResize() {
@@ -24,6 +25,37 @@ export default function ImageViewport() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Автоматическое масштабирование изображения при первой загрузке нового изображения
+  useEffect(() => {
+    if (!image) {
+      lastImageUrlRef.current = undefined;
+      return;
+    }
+    if (!img || size.w === 0 || size.h === 0) return;
+    
+    // Проверяем, изменился ли URL изображения (новая загрузка)
+    const isNewImage = lastImageUrlRef.current !== image.url;
+    if (!isNewImage) return;
+    
+    lastImageUrlRef.current = image.url;
+    
+    const imgWidth = image.naturalWidth;
+    const imgHeight = image.naturalHeight;
+    
+    // Вычисляем масштаб, чтобы изображение поместилось в контейнер
+    const scaleX = size.w / imgWidth;
+    const scaleY = size.h / imgHeight;
+    const newScale = Math.min(scaleX, scaleY, 1); // Не увеличиваем больше оригинала
+    
+    // Центрируем изображение
+    const scaledWidth = imgWidth * newScale;
+    const scaledHeight = imgHeight * newScale;
+    const newOffsetX = (size.w - scaledWidth) / 2;
+    const newOffsetY = (size.h - scaledHeight) / 2;
+    
+    setView(newScale, newOffsetX, newOffsetY);
+  }, [image, img, size.w, size.h, setView]);
 
   const onWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();

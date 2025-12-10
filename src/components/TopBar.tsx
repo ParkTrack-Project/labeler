@@ -70,7 +70,9 @@ export default function TopBar() {
     }
   }, [cameraId, apiBase, token, setImage, image]);
 
-  function fitToView(_img: { naturalWidth: number; naturalHeight: number; url: string }) {
+  function fitToView(img: { naturalWidth: number; naturalHeight: number; url: string }) {
+    // Устанавливаем масштаб 1 и центрируем изображение
+    // Реальное масштабирование будет выполнено в ImageViewport при монтировании
     useStore.getState().setView(1, 0, 0);
   }
 
