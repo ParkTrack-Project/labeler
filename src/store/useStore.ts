@@ -45,6 +45,7 @@ type State = {
   setImage(img: ImageMeta | undefined): void;
 
   loadCameraMeta(id: number): Promise<void>;
+  saveCamera(id: number, patch: Partial<Camera>): Promise<void>;
 
   setTool(t: ToolMode): void;
   setView(scale: number, offsetX: number, offsetY: number): void;
@@ -71,7 +72,7 @@ export const useStore = create<State>((set, get) => ({
   cameraId: '',
   image: undefined,
   cameraMeta: undefined,
-  viewMode: 'labeler',
+  viewMode: 'cameras',
   tool: 'select',
   zones: [],
   zoneDraft: null,
@@ -91,6 +92,18 @@ export const useStore = create<State>((set, get) => ({
       set({ cameraMeta: cam });
     } catch (e: any) {
       set({ error: String(e) });
+    }
+  },
+
+  async saveCamera(id, patch) {
+    set({ loading: true, error: undefined, info: undefined });
+    try {
+      const updated = await api.updateCamera(id, patch);
+      set({ cameraMeta: updated, info: 'camera-updated' });
+    } catch (e: any) {
+      set({ error: String(e) });
+    } finally {
+      set({ loading: false });
     }
   },
 
@@ -192,29 +205,61 @@ export const useStore = create<State>((set, get) => ({
 
   async saveZone(id) {
     const current = get().zones.find(z => String(z.id) === String(id));
-    if (!current) return;
+    if (!current) {
+      console.warn('saveZone: zone not found', id);
+      return;
+    }
     get().ensureZoneClockwise(id);
 
     set({ loading: true, info: undefined, error: undefined });
     try {
-      const existed = (typeof id === 'number' && id > 0) || typeof id === 'string';
+      // Новая зона имеет отрицательный ID (tmpZoneId начинается с -1 и уменьшается)
+      // Существующая зона имеет положительный ID (из API) или строковый ID
+      const isNewZone = typeof id === 'number' && id < 0;
+      
+      // Для новой зоны: если координаты не заданы, используем координаты камеры как дефолтные
+      let zoneToSave = current;
+      if (isNewZone) {
+        const cameraMeta = get().cameraMeta;
+        if (cameraMeta && cameraMeta.latitude && cameraMeta.longitude) {
+          // Проверяем, есть ли точки без координат
+          const hasMissingCoords = current.points.some(p => p.latitude === null || p.longitude === null);
+          if (hasMissingCoords) {
+            // Используем координаты камеры как дефолтные для всех точек
+            zoneToSave = {
+              ...current,
+              points: current.points.map(p => ({
+                ...p,
+                latitude: p.latitude ?? cameraMeta.latitude,
+                longitude: p.longitude ?? cameraMeta.longitude
+              })) as any
+            };
+          }
+        } else {
+          // Если у камеры нет координат, выбрасываем понятную ошибку
+          throw new Error('Необходимо сначала установить координаты камеры на карте. Перейдите в "Отметить камеру на карте" и установите координаты.');
+        }
+      }
 
-      if (existed) {
-        const updated = await api.updateZone(id, current);
+      if (isNewZone) {
+        // Новая зона - создаем через POST
+        const resp = await api.createZone(zoneToSave);
+        const zone_id: Id = resp?.zone_id ?? resp?.id ?? resp;
+        set((s) => ({
+          zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...zoneToSave, id: zone_id } : zz),
+          activeZoneId: zone_id,
+          info: 'zone-created'
+        }));
+      } else {
+        // Существующая зона - обновляем через PUT
+        const updated = await api.updateZone(id, zoneToSave);
         set((s) => ({
           zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...updated } : zz),
           info: 'zone-updated'
         }));
-      } else {
-        const resp = await api.createZone(current);
-        const zone_id: Id = resp?.zone_id ?? resp?.id ?? resp;
-        set((s) => ({
-          zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...current, id: zone_id } : zz),
-          activeZoneId: zone_id,
-          info: 'zone-created'
-        }));
       }
     } catch (e: any) {
+      console.error('saveZone error:', e);
       set({ error: String(e) });
     } finally {
       set({ loading: false });

@@ -12,5 +12,19 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true
+  },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Выделяем большие библиотеки в отдельные чанки
+          'react-vendor': ['react', 'react-dom'],
+          'konva-vendor': ['konva', 'react-konva'],
+          'leaflet-vendor': ['leaflet', 'react-leaflet'],
+          'zustand-vendor': ['zustand']
+        }
+      }
+    }
   }
 });

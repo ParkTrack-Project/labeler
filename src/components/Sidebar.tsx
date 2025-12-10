@@ -1,9 +1,94 @@
 import { useStore } from '@/store/useStore';
-import { Button, Field, Input, Select } from './UiKit';
+import { Button, Field, Input, Select, Textarea } from './UiKit';
+import { api } from '@/api/client';
+import { useState, useEffect } from 'react';
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString('ru-RU', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function Sidebar() {
   const s = useStore();
   const zone = s.zones.find(z => String(z.id) === String(s.activeZoneId));
+  const camera = s.cameraMeta;
+  
+  // Локальное состояние для редактирования камеры
+  const [cameraTitle, setCameraTitle] = useState(camera?.title || '');
+  const [cameraSource, setCameraSource] = useState(camera?.source || '');
+  const [cameraCalib, setCameraCalib] = useState('');
+  const [cameraIsActive, setCameraIsActive] = useState(camera?.is_active !== false);
+  const [cameraImageWidth, setCameraImageWidth] = useState(camera?.image_width?.toString() || '');
+  const [cameraImageHeight, setCameraImageHeight] = useState(camera?.image_height?.toString() || '');
+
+  // Автоматически загружаем метаданные камеры и зоны при монтировании
+  useEffect(() => {
+    if (s.cameraId && !s.cameraMeta) {
+      const id = parseInt(s.cameraId, 10);
+      if (!isNaN(id)) {
+        s.loadCameraMeta(id);
+      }
+    }
+    if (s.cameraId && s.zones.length === 0) {
+      s.loadZones();
+    }
+  }, [s.cameraId]);
+
+  // Синхронизируем состояние при изменении камеры
+  useEffect(() => {
+    if (camera) {
+      setCameraTitle(camera.title || '');
+      setCameraSource(camera.source || '');
+      setCameraCalib(camera.calib ? JSON.stringify(camera.calib, null, 2) : '');
+      setCameraIsActive(camera.is_active !== false);
+      setCameraImageWidth(camera.image_width?.toString() || '');
+      setCameraImageHeight(camera.image_height?.toString() || '');
+    }
+  }, [camera]);
+
+  async function autoFillImageDimensions() {
+    if (!camera?.camera_id) return;
+    try {
+      const snap = await api.getSnapshot(camera.camera_id);
+      if (snap.width) setCameraImageWidth(snap.width.toString());
+      if (snap.height) setCameraImageHeight(snap.height.toString());
+    } catch (e: any) {
+      s.error = String(e);
+    }
+  }
+
+  async function saveCamera() {
+    if (!camera) return;
+    let calibParsed: any = null;
+    if (cameraCalib.trim()) {
+      try {
+        calibParsed = JSON.parse(cameraCalib);
+      } catch (e) {
+        s.error = 'Ошибка парсинга JSON в calib';
+        return;
+      }
+    }
+    await s.saveCamera(camera.camera_id, {
+      title: cameraTitle,
+      source: cameraSource,
+      calib: calibParsed,
+      is_active: cameraIsActive,
+      image_width: parseInt(cameraImageWidth || '0', 10) || undefined,
+      image_height: parseInt(cameraImageHeight || '0', 10) || undefined
+    });
+  }
 
   function startDrawZone() {
     s.addZone(); // теперь это включает drawZone и очищает черновик
@@ -32,6 +117,77 @@ export default function Sidebar() {
       </div>
 
       <hr/>
+
+      {/* Форма редактирования камеры */}
+      {camera && (
+        <>
+          <h4>Настройки камеры</h4>
+          <Field label="Title">
+            <Input 
+              value={cameraTitle}
+              onChange={e => setCameraTitle(e.target.value)}
+              placeholder="Название камеры"
+            />
+          </Field>
+          <Field label="Source (видеопоток)">
+            <Input 
+              value={cameraSource}
+              onChange={e => setCameraSource(e.target.value)}
+              placeholder="https://... или rtsp://..."
+            />
+          </Field>
+          <Field label="Calib (JSON)">
+            <Textarea 
+              value={cameraCalib}
+              onChange={e => setCameraCalib(e.target.value)}
+              placeholder='{"image_width": 1920, ...}'
+              rows={6}
+              style={{ fontFamily: 'monospace', fontSize: '12px' }}
+            />
+          </Field>
+          <Field label="Image Width">
+            <div className="row" style={{ gap: 6 }}>
+              <Input 
+                type="number"
+                min={1}
+                value={cameraImageWidth}
+                onChange={e => setCameraImageWidth(e.target.value)}
+                placeholder="1920"
+              />
+              <Button className="ghost" onClick={autoFillImageDimensions} title="Автозаполнить из snapshot">
+                Авто
+              </Button>
+            </div>
+          </Field>
+          <Field label="Image Height">
+            <Input 
+              type="number"
+              min={1}
+              value={cameraImageHeight}
+              onChange={e => setCameraImageHeight(e.target.value)}
+              placeholder="1080"
+            />
+          </Field>
+          <Field label="Is Active">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input 
+                type="checkbox"
+                checked={cameraIsActive}
+                onChange={e => setCameraIsActive(e.target.checked)}
+              />
+              <span className="small">Активна</span>
+            </label>
+          </Field>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <Button onClick={saveCamera}>Сохранить камеру</Button>
+          </div>
+          <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
+            <div>Создано: {formatDate(camera.created_at)}</div>
+            <div>Обновлено: {formatDate(camera.updated_at)}</div>
+          </div>
+          <hr/>
+        </>
+      )}
 
       <div className="col">
         <Button onClick={startDrawZone}>+ Добавить зону</Button>
@@ -78,6 +234,10 @@ export default function Sidebar() {
             <Input type="number" min={0} value={zone.pay}
               onChange={e=>s.updateZone(zone.id,{pay: parseInt(e.target.value||'0',10)})}/>
           </Field>
+          <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
+            <div>Создано: {formatDate(zone.created_at)}</div>
+            <div>Обновлено: {formatDate(zone.updated_at)}</div>
+          </div>
 
           <div className="row" style={{gap:8}}>
             <Button onClick={()=>s.setTool('editZone')}>Редактировать вершины</Button>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { api, Camera } from '@/api/client';
 import { Button } from './UiKit';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L, { LatLng, LatLngExpression } from 'leaflet';
 
 const cameraIcon = L.divIcon({
@@ -18,6 +18,22 @@ function ClickHandler({ onClick }: { onClick: (pos: LatLng) => void }) {
       onClick(e.latlng);
     }
   });
+  return null;
+}
+
+function MapAutoFocus({ point, camera }: { point: LatLng | null; camera: Camera | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (point) {
+      map.setView(point, 17);
+      return;
+    }
+    if (camera?.latitude && camera?.longitude) {
+      map.setView([camera.latitude, camera.longitude], 17);
+    }
+  }, [point, camera, map]);
+
   return null;
 }
 
@@ -108,6 +124,7 @@ export default function CameraMapSelector() {
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <MapAutoFocus point={point} camera={camera} />
           <ClickHandler onClick={setPoint} />
           {point && <Marker position={point} icon={cameraIcon} />}
         </MapContainer>
