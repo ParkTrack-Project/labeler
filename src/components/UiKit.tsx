@@ -26,7 +26,6 @@ export function Field({label, children, hint}:{label:string; children:React.Reac
   );
 }
 
-/** Кастомный файл-пикер: кнопка + подпись с именем файла, выровнены по центру */
 export function FilePicker({
   accept = 'image/*',
   onPick

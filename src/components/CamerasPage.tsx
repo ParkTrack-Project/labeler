@@ -5,7 +5,6 @@ import { Button, Field, Input } from './UiKit';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L, { LatLngExpression } from 'leaflet';
 
-// Simple marker icons fix for Leaflet + Vite
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -68,7 +67,6 @@ export default function CamerasPage() {
     };
   }, []);
 
-  // подгружаем количество зон для каждой камеры
   useEffect(() => {
     if (!cameras.length) return;
     let cancelled = false;
@@ -89,7 +87,6 @@ export default function CamerasPage() {
         for (const [id, count] of entries) map[id] = count;
         setZoneCounts(map);
       } catch {
-        // игнорируем, счётчики зон не критичны для работы страницы
       }
     }
     loadCounts();
@@ -101,17 +98,13 @@ export default function CamerasPage() {
   const center: LatLngExpression = useMemo(() => {
     const first = cameras.find(c => c.latitude && c.longitude);
     if (first) return [first.latitude, first.longitude];
-    // default city center (e.g. Saint Petersburg)
     return [59.9386, 30.3141];
   }, [cameras]);
 
   function onEditCamera(cam: Camera) {
-    // Сначала устанавливаем cameraId
     setCamera(String(cam.camera_id));
-    // Затем загружаем метаданные и зоны
     loadCameraMeta(cam.camera_id);
     store.loadZones();
-    // И только потом переключаемся на labeler (там автоматически загрузится изображение)
     setViewMode('labeler');
   }
 
@@ -119,7 +112,6 @@ export default function CamerasPage() {
     setDeletingId(cameraId);
     try {
       await api.deleteCamera(cameraId);
-      // Обновляем список камер
       const list = await api.listCameras();
       setCameras(list);
       if (selectedId === cameraId) {
@@ -145,7 +137,6 @@ export default function CamerasPage() {
       setLoading(true);
       setError(undefined);
       const newCamera = await api.createCamera(data);
-      // Обновляем список камер, перезагружая с сервера для получения актуальных данных
       const updatedList = await api.listCameras();
       setCameras(updatedList);
       setShowAddCamera(false);
@@ -234,17 +225,16 @@ export default function CamerasPage() {
           {cameras.filter(c => c.latitude && c.longitude).map(cam => {
             const isActive = cam.camera_id === selectedId;
             const isHover = cam.camera_id === hoverId;
-            const isCameraActive = cam.is_active !== false; // по умолчанию активна, если не указано
-            // Если камера неактивна - красный цвет, иначе обычная логика
+            const isCameraActive = cam.is_active !== false;
             let color: string;
             if (!isCameraActive) {
-              color = '#ff4d4f'; // красный для неактивных
+              color = '#ff4d4f';
             } else if (isActive) {
-              color = '#ff7a45'; // оранжевый для выбранных
+              color = '#ff7a45';
             } else if (isHover) {
-              color = '#ffd666'; // желтый при наведении
+              color = '#ffd666';
             } else {
-              color = '#2f54eb'; // синий по умолчанию
+              color = '#2f54eb';
             }
             const icon = L.divIcon({
               className: 'camera-marker',

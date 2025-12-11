@@ -13,7 +13,6 @@ import { api, Camera } from '@/api/client';
 
 let tmpZoneId = -1;
 
-// Утилита: PxPoint -> GeoPoint (geo пока null)
 const toGeo = (p: PxPoint): GeoPoint => ({ x: p.x, y: p.y, longitude: null, latitude: null });
 
 type State = {
@@ -28,7 +27,6 @@ type State = {
   zones: ParkingZone[];
   activeZoneId?: Id;
 
-  // Черновик рисуемой зоны (4 точки)
   zoneDraft: PxPoint[] | null;
 
   scale: number;
@@ -54,15 +52,14 @@ type State = {
 
   loadZones(): Promise<void>;
 
-  addZone(): void; // теперь: переводит в drawZone и чистит драфт
-  createZoneFromDraft(): void; // внутренняя: завершение драфта -> добавление зоны
+  addZone(): void;
+  createZoneFromDraft(): void;
 
   updateZone(id: Id, patch: Partial<ParkingZone>): void;
   ensureZoneClockwise(id: Id): void;
   removeZone(id: Id): Promise<void>;
   saveZone(id: Id): Promise<void>;
 
-  // Рисование зоны
   zoneDraftAddPoint(p: PxPoint): void;
   zoneDraftClear(): void;
 };
@@ -131,12 +128,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
 
-  // Теперь "Добавить зону" = включить drawZone
   addZone() {
     set({ tool: 'drawZone', zoneDraft: [] });
   },
 
-  // Завершение черновика: создаём зону из ровно 4 точек, выбираем ее, tool -> select
   createZoneFromDraft() {
     const draft = get().zoneDraft;
     if (!draft || draft.length !== 4) return;
@@ -144,7 +139,6 @@ export const useStore = create<State>((set, get) => ({
     const { cameraId, zones } = get();
     const cid = parseInt(cameraId || '0', 10) || 0;
 
-    // Сортируем точки по часовой
     const quad = clockwiseSort(draft as [PxPoint, PxPoint, PxPoint, PxPoint]) as [PxPoint, PxPoint, PxPoint, PxPoint];
 
     const z: ParkingZone = {
@@ -188,7 +182,6 @@ export const useStore = create<State>((set, get) => ({
       set((s) => {
         const nextZones = s.zones.filter(z => String(z.id) !== String(id));
 
-        // ⬇️ если не осталось зон — сбрасываем временный счётчик
         if (nextZones.length === 0) {
           tmpZoneId = -1;
         }
@@ -213,19 +206,16 @@ export const useStore = create<State>((set, get) => ({
 
     set({ loading: true, info: undefined, error: undefined });
     try {
-      // Новая зона имеет отрицательный ID (tmpZoneId начинается с -1 и уменьшается)
-      // Существующая зона имеет положительный ID (из API) или строковый ID
+      // New zones have negative IDs (temporary), existing zones have positive IDs from API
       const isNewZone = typeof id === 'number' && id < 0;
       
-      // Для новой зоны: если координаты не заданы, используем координаты камеры как дефолтные
       let zoneToSave = current;
       if (isNewZone) {
+        // For new zones, use camera coordinates as default if points don't have geo coordinates
         const cameraMeta = get().cameraMeta;
         if (cameraMeta && cameraMeta.latitude && cameraMeta.longitude) {
-          // Проверяем, есть ли точки без координат
           const hasMissingCoords = current.points.some(p => p.latitude === null || p.longitude === null);
           if (hasMissingCoords) {
-            // Используем координаты камеры как дефолтные для всех точек
             zoneToSave = {
               ...current,
               points: current.points.map(p => ({
@@ -236,13 +226,11 @@ export const useStore = create<State>((set, get) => ({
             };
           }
         } else {
-          // Если у камеры нет координат, выбрасываем понятную ошибку
-          throw new Error('Необходимо сначала установить координаты камеры на карте. Перейдите в "Отметить камеру на карте" и установите координаты.');
+          throw new Error('Camera coordinates must be set first. Go to "Mark camera on map" and set coordinates.');
         }
       }
 
       if (isNewZone) {
-        // Новая зона - создаем через POST
         const resp = await api.createZone(zoneToSave);
         const zone_id: Id = resp?.zone_id ?? resp?.id ?? resp;
         set((s) => ({
@@ -251,7 +239,6 @@ export const useStore = create<State>((set, get) => ({
           info: 'zone-created'
         }));
       } else {
-        // Существующая зона - обновляем через PUT
         const updated = await api.updateZone(id, zoneToSave);
         set((s) => ({
           zones: s.zones.map(zz => String(zz.id) === String(id) ? { ...updated } : zz),
@@ -266,18 +253,15 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  // ---- Рисование зоны ----
   zoneDraftAddPoint(p) {
     const cur = get().zoneDraft ?? [];
     const next = [...cur, p];
     if (next.length < 4) {
       set({ zoneDraft: next });
     } else if (next.length === 4) {
+      // Auto-complete zone when 4 points are added
       set({ zoneDraft: next });
-      // автоматическое завершение
       get().createZoneFromDraft();
-    } else {
-      // игнорируем клики после 4-й точки
     }
   },
   zoneDraftClear() { set({ zoneDraft: null, tool: 'select' }); }

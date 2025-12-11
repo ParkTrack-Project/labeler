@@ -25,7 +25,6 @@ export default function Sidebar() {
   const zone = s.zones.find(z => String(z.id) === String(s.activeZoneId));
   const camera = s.cameraMeta;
   
-  // Локальное состояние для редактирования камеры
   const [cameraTitle, setCameraTitle] = useState(camera?.title || '');
   const [cameraSource, setCameraSource] = useState(camera?.source || '');
   const [cameraCalib, setCameraCalib] = useState('');
@@ -33,7 +32,6 @@ export default function Sidebar() {
   const [cameraImageWidth, setCameraImageWidth] = useState(camera?.image_width?.toString() || '');
   const [cameraImageHeight, setCameraImageHeight] = useState(camera?.image_height?.toString() || '');
 
-  // Автоматически загружаем метаданные камеры и зоны при монтировании
   useEffect(() => {
     if (s.cameraId && !s.cameraMeta) {
       const id = parseInt(s.cameraId, 10);
@@ -46,7 +44,6 @@ export default function Sidebar() {
     }
   }, [s.cameraId]);
 
-  // Синхронизируем состояние при изменении камеры
   useEffect(() => {
     if (camera) {
       setCameraTitle(camera.title || '');
@@ -63,7 +60,6 @@ export default function Sidebar() {
     try {
       const snap = await api.getSnapshot(camera.camera_id);
       if (snap?.image_url) {
-        // Загружаем изображение для получения его размеров
         const img = new Image();
         img.onload = () => {
           setCameraImageWidth(img.naturalWidth.toString());
@@ -101,14 +97,13 @@ export default function Sidebar() {
   }
 
   function startDrawZone() {
-    s.addZone(); // теперь это включает drawZone и очищает черновик
+    s.addZone();
   }
   function finishEditing() {
     s.setTool('select');
   }
 
   function openCameraOnMap() {
-    // Разрешаем открывать селектор даже без cameraId: внутри покажется подсказка.
     s.setViewMode('cameraMapSelector');
   }
 
@@ -128,7 +123,6 @@ export default function Sidebar() {
 
       <hr/>
 
-      {/* Форма редактирования камеры */}
       {camera && (
         <>
           <h4>Настройки камеры</h4>
