@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { api, Camera } from '@/api/client';
-import { Button } from './UiKit';
+import { Button, Field, Input } from './UiKit';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L, { LatLng, LatLngExpression } from 'leaflet';
 
@@ -43,6 +43,8 @@ export default function CameraMapSelector() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [point, setPoint] = useState<LatLng | null>(null);
+  const [latInput, setLatInput] = useState('');
+  const [lngInput, setLngInput] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -53,7 +55,10 @@ export default function CameraMapSelector() {
         const cam = await api.getCamera(parseInt(cameraId, 10));
         setCamera(cam);
         if (cam.latitude && cam.longitude) {
-          setPoint(new L.LatLng(cam.latitude, cam.longitude));
+          const newPoint = new L.LatLng(cam.latitude, cam.longitude);
+          setPoint(newPoint);
+          setLatInput(cam.latitude.toString());
+          setLngInput(cam.longitude.toString());
         }
       } catch (e: any) {
         setError(String(e));
@@ -63,6 +68,31 @@ export default function CameraMapSelector() {
     }
     load();
   }, [cameraId]);
+
+  useEffect(() => {
+    if (point) {
+      setLatInput(point.lat.toString());
+      setLngInput(point.lng.toString());
+    }
+  }, [point]);
+
+  function handleLatInputChange(value: string) {
+    setLatInput(value);
+    const lat = parseFloat(value);
+    if (!isNaN(lat) && lat >= -90 && lat <= 90) {
+      const lng = point ? point.lng : (parseFloat(lngInput) || 30.3141);
+      setPoint(new L.LatLng(lat, lng));
+    }
+  }
+
+  function handleLngInputChange(value: string) {
+    setLngInput(value);
+    const lng = parseFloat(value);
+    if (!isNaN(lng) && lng >= -180 && lng <= 180) {
+      const lat = point ? point.lat : (parseFloat(latInput) || 59.9386);
+      setPoint(new L.LatLng(lat, lng));
+    }
+  }
 
   const center: LatLngExpression = useMemo(() => {
     if (point) return point;
@@ -108,9 +138,29 @@ export default function CameraMapSelector() {
         {loading && <div className="small">Загрузка…</div>}
         {error && <div className="small" style={{ color: '#ff6b6b' }}>{error}</div>}
 
-        <div className="small" style={{ marginTop: 8 }}>
-          Нажмите на карту, чтобы выбрать расположение камеры.
+        <div className="small" style={{ marginTop: 8, marginBottom: 12 }}>
+          Нажмите на карту, чтобы выбрать расположение камеры, или введите координаты вручную:
         </div>
+
+        <Field label="Latitude">
+          <Input
+            type="number"
+            step="any"
+            value={latInput}
+            onChange={e => handleLatInputChange(e.target.value)}
+            placeholder="59.9386"
+          />
+        </Field>
+
+        <Field label="Longitude">
+          <Input
+            type="number"
+            step="any"
+            value={lngInput}
+            onChange={e => handleLngInputChange(e.target.value)}
+            placeholder="30.3141"
+          />
+        </Field>
 
         <div className="row" style={{ marginTop: 12, gap: 8 }}>
           <Button onClick={onSave} disabled={!point || loading}>Сохранить</Button>

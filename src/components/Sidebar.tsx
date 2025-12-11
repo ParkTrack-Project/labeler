@@ -25,7 +25,6 @@ export default function Sidebar() {
   const zone = s.zones.find(z => String(z.id) === String(s.activeZoneId));
   const camera = s.cameraMeta;
   
-  // Локальное состояние для редактирования камеры
   const [cameraTitle, setCameraTitle] = useState(camera?.title || '');
   const [cameraSource, setCameraSource] = useState(camera?.source || '');
   const [cameraCalib, setCameraCalib] = useState('');
@@ -33,7 +32,6 @@ export default function Sidebar() {
   const [cameraImageWidth, setCameraImageWidth] = useState(camera?.image_width?.toString() || '');
   const [cameraImageHeight, setCameraImageHeight] = useState(camera?.image_height?.toString() || '');
 
-  // Автоматически загружаем метаданные камеры и зоны при монтировании
   useEffect(() => {
     if (s.cameraId && !s.cameraMeta) {
       const id = parseInt(s.cameraId, 10);
@@ -46,7 +44,6 @@ export default function Sidebar() {
     }
   }, [s.cameraId]);
 
-  // Синхронизируем состояние при изменении камеры
   useEffect(() => {
     if (camera) {
       setCameraTitle(camera.title || '');
@@ -62,8 +59,17 @@ export default function Sidebar() {
     if (!camera?.camera_id) return;
     try {
       const snap = await api.getSnapshot(camera.camera_id);
-      if (snap.width) setCameraImageWidth(snap.width.toString());
-      if (snap.height) setCameraImageHeight(snap.height.toString());
+      if (snap?.image_url) {
+        const img = new Image();
+        img.onload = () => {
+          setCameraImageWidth(img.naturalWidth.toString());
+          setCameraImageHeight(img.naturalHeight.toString());
+        };
+        img.onerror = () => {
+          s.error = 'Ошибка загрузки изображения для получения размеров';
+        };
+        img.src = snap.image_url;
+      }
     } catch (e: any) {
       s.error = String(e);
     }
@@ -91,14 +97,13 @@ export default function Sidebar() {
   }
 
   function startDrawZone() {
-    s.addZone(); // теперь это включает drawZone и очищает черновик
+    s.addZone();
   }
   function finishEditing() {
     s.setTool('select');
   }
 
   function openCameraOnMap() {
-    // Разрешаем открывать селектор даже без cameraId: внутри покажется подсказка.
     s.setViewMode('cameraMapSelector');
   }
 
@@ -118,7 +123,6 @@ export default function Sidebar() {
 
       <hr/>
 
-      {/* Форма редактирования камеры */}
       {camera && (
         <>
           <h4>Настройки камеры</h4>
@@ -227,8 +231,11 @@ export default function Sidebar() {
             </Select>
           </Field>
           <Field label="Capacity">
-            <Input type="number" min={0} value={zone.capacity}
-              onChange={e=>s.updateZone(zone.id,{capacity: parseInt(e.target.value||'0',10)})}/>
+            <Input type="number" min={1} value={zone.capacity}
+              onChange={e=>{
+                const val = parseInt(e.target.value||'1',10);
+                s.updateZone(zone.id,{capacity: Math.max(1, val)});
+              }}/>
           </Field>
           <Field label="Pay">
             <Input type="number" min={0} value={zone.pay}

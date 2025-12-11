@@ -10,7 +10,6 @@ export default function ZoneLayer() {
   const W = image?.naturalWidth ?? 0;
   const H = image?.naturalHeight ?? 0;
 
-  // Клик по сцене для режима drawZone — добавляем точку
   function onCanvasClick(e: any) {
     if (tool !== 'drawZone') return;
     const stage = e.target.getStage();
@@ -25,7 +24,7 @@ export default function ZoneLayer() {
 
   return (
     <Group>
-      {/* Прозрачный фон для ловли кликов в режиме drawZone */}
+      {/* Invisible overlay to capture clicks in drawZone mode */}
       {tool === 'drawZone' && W>0 && H>0 && (
         <Rect
           x={0} y={0} width={W} height={H}
@@ -34,7 +33,6 @@ export default function ZoneLayer() {
         />
       )}
 
-      {/* Существующие зоны */}
       {zones.map(z => {
         const active = String(z.id) === String(activeZoneId);
         const pts = z.image_quad.flatMap(p => [p.x, p.y]);
@@ -51,7 +49,6 @@ export default function ZoneLayer() {
               shadowOpacity={active ? 0.5 : 0}
               fill={active ? 'rgba(255,122,69,0.12)' : 'rgba(106,160,255,0.10)'}
             />
-            {/* Вершины доступны ТОЛЬКО в режиме editZone и для активной зоны */}
             {active && tool === 'editZone' && z.image_quad.map((p,i)=>(
               <Circle
                 key={i}
@@ -65,21 +62,18 @@ export default function ZoneLayer() {
                 onMouseDown={(e:any)=>{ e.cancelBubble = true; }}
                 onDragMove={(e)=>{
                   const {x,y} = e.target.position();
+                  // Update both image_quad (for display) and points.x/y (for API)
                   const next = z.image_quad.map((pp,ii)=> ii===i ? {x,y} : pp) as any;
-                  // сразу обновим и image_quad, и points.x/y
                   const nextPoints = z.points.map((pt,ii)=> ii===i ? { ...pt, x, y } : pt) as any;
                   updateZone(z.id, { image_quad: next, points: nextPoints });
                 }}
-                onDragEnd={()=>{
-                  // ничего: Stage в edit-режиме не draggable, так что не "прыгает"
-                }}
+                onDragEnd={()=>{}}
               />
             ))}
           </Group>
         );
       })}
 
-      {/* Черновик зоны (до 4 точек) */}
       {tool === 'drawZone' && zoneDraft && zoneDraft.length>0 && (
         <Group listening={false}>
           <Line
