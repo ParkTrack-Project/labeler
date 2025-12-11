@@ -1,6 +1,5 @@
 import { useStore } from '@/store/useStore';
 import { Button, Field, Input, Select, Textarea } from './UiKit';
-import { api } from '@/api/client';
 import { useState, useEffect } from 'react';
 
 function formatDate(dateStr?: string): string {
@@ -29,8 +28,6 @@ export default function Sidebar() {
   const [cameraSource, setCameraSource] = useState(camera?.source || '');
   const [cameraCalib, setCameraCalib] = useState('');
   const [cameraIsActive, setCameraIsActive] = useState(camera?.is_active !== false);
-  const [cameraImageWidth, setCameraImageWidth] = useState(camera?.image_width?.toString() || '');
-  const [cameraImageHeight, setCameraImageHeight] = useState(camera?.image_height?.toString() || '');
 
   useEffect(() => {
     if (s.cameraId && !s.cameraMeta) {
@@ -50,30 +47,8 @@ export default function Sidebar() {
       setCameraSource(camera.source || '');
       setCameraCalib(camera.calib ? JSON.stringify(camera.calib, null, 2) : '');
       setCameraIsActive(camera.is_active !== false);
-      setCameraImageWidth(camera.image_width?.toString() || '');
-      setCameraImageHeight(camera.image_height?.toString() || '');
     }
   }, [camera]);
-
-  async function autoFillImageDimensions() {
-    if (!camera?.camera_id) return;
-    try {
-      const snap = await api.getSnapshot(camera.camera_id);
-      if (snap?.image_url) {
-        const img = new Image();
-        img.onload = () => {
-          setCameraImageWidth(img.naturalWidth.toString());
-          setCameraImageHeight(img.naturalHeight.toString());
-        };
-        img.onerror = () => {
-          s.error = 'Ошибка загрузки изображения для получения размеров';
-        };
-        img.src = snap.image_url;
-      }
-    } catch (e: any) {
-      s.error = String(e);
-    }
-  }
 
   async function saveCamera() {
     if (!camera) return;
@@ -90,9 +65,7 @@ export default function Sidebar() {
       title: cameraTitle,
       source: cameraSource,
       calib: calibParsed,
-      is_active: cameraIsActive,
-      image_width: parseInt(cameraImageWidth || '0', 10) || undefined,
-      image_height: parseInt(cameraImageHeight || '0', 10) || undefined
+      is_active: cameraIsActive
     });
   }
 
@@ -147,29 +120,6 @@ export default function Sidebar() {
               placeholder='{"image_width": 1920, ...}'
               rows={6}
               style={{ fontFamily: 'monospace', fontSize: '12px' }}
-            />
-          </Field>
-          <Field label="Image Width">
-            <div className="row" style={{ gap: 6 }}>
-              <Input 
-                type="number"
-                min={1}
-                value={cameraImageWidth}
-                onChange={e => setCameraImageWidth(e.target.value)}
-                placeholder="1920"
-              />
-              <Button className="ghost" onClick={autoFillImageDimensions} title="Автозаполнить из snapshot">
-                Авто
-              </Button>
-            </div>
-          </Field>
-          <Field label="Image Height">
-            <Input 
-              type="number"
-              min={1}
-              value={cameraImageHeight}
-              onChange={e => setCameraImageHeight(e.target.value)}
-              placeholder="1080"
             />
           </Field>
           <Field label="Is Active">
