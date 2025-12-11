@@ -145,7 +145,7 @@ export const useStore = create<State>((set, get) => ({
       id: tmpZoneId--,
       camera_id: cid,
       zone_type: 'standard',
-      capacity: 0,
+      capacity: 1,
       pay: 0,
       image_quad: quad,
       points: quad.map(toGeo) as any
@@ -202,6 +202,13 @@ export const useStore = create<State>((set, get) => ({
       console.warn('saveZone: zone not found', id);
       return;
     }
+    
+    // Validate capacity before saving
+    if (current.capacity < 1) {
+      set({ error: 'Capacity must be at least 1. Please set capacity before saving.' });
+      return;
+    }
+    
     get().ensureZoneClockwise(id);
 
     set({ loading: true, info: undefined, error: undefined });
