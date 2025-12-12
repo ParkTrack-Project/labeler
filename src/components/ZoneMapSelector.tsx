@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Button } from './UiKit';
-import { MapContainer, TileLayer, Polygon, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Polyline, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L, { LatLng, LatLngExpression } from 'leaflet';
 
 type LatLngTuple = [number, number];
@@ -88,7 +88,9 @@ export default function ZoneMapSelector() {
   async function onSave() {
     if (!zone) return;
     if (points.length !== 4) {
-      setError('Необходимо отметить все 4 точки на карте перед сохранением');
+      const msg = 'Необходимо отметить все 4 точки на карте перед сохранением';
+      setError(msg);
+      alert(msg);
       return;
     }
     try {
@@ -140,7 +142,7 @@ export default function ZoneMapSelector() {
         </div>
 
         <div className="row" style={{ marginTop: 12, gap: 8 }}>
-          <Button onClick={onSave} disabled={!zone || points.length !== 4 || loading}>Сохранить</Button>
+          <Button onClick={onSave} disabled={!zone || loading}>Сохранить</Button>
           <Button className="ghost" onClick={onCancel}>Отмена</Button>
           <Button className="ghost" onClick={onReset}>Сбросить</Button>
         </div>
@@ -154,21 +156,26 @@ export default function ZoneMapSelector() {
           />
           <MapAutoFit points={points} />
           <ClickHandler onClick={onMapClick} />
-          {polygon.length > 0 && (
+          {points.length >= 2 && (
             <>
               {points.length === 4 ? (
-                <Polygon positions={polygon} pathOptions={{ color: '#ff7a45', fillOpacity: 0.2 }} />
-              ) : (
                 <Polygon 
+                  key={`polygon-${points.map(p => `${p.lat},${p.lng}`).join(';')}`}
                   positions={polygon} 
-                  pathOptions={{ color: '#ff7a45', fillOpacity: 0, dashArray: '10, 5', weight: 2 }} 
+                  pathOptions={{ color: '#ff7a45', fillOpacity: 0.2, weight: 2 }} 
+                />
+              ) : (
+                <Polyline 
+                  key={`polyline-${points.map(p => `${p.lat},${p.lng}`).join(';')}`}
+                  positions={polygon} 
+                  pathOptions={{ color: '#ff7a45', dashArray: '10, 5', weight: 2 }} 
                 />
               )}
             </>
           )}
           {points.map((p, idx) => (
             <Marker
-              key={idx}
+              key={`marker-${idx}-${p.lat}-${p.lng}`}
               position={p}
               icon={L.divIcon({
                 className: 'zone-point-marker',
@@ -178,6 +185,12 @@ export default function ZoneMapSelector() {
               })}
               draggable
               eventHandlers={{
+                drag: (e) => {
+                  // Update lines in real-time during drag
+                  const newPos = e.target.getLatLng();
+                  const updatedPoints = points.map((pt, i) => i === idx ? new L.LatLng(newPos.lat, newPos.lng) : pt);
+                  setPoints(updatedPoints);
+                },
                 dragend: (e) => {
                   const newPos = e.target.getLatLng();
                   const updatedPoints = points.map((pt, i) => i === idx ? new L.LatLng(newPos.lat, newPos.lng) : pt);
